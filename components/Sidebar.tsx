@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutDashboard,
   Users,
@@ -10,6 +10,7 @@ import {
   Settings,
   FileText,
   Target,
+  LogOut,
 } from "lucide-react";
 
 const navItems = [
@@ -23,6 +24,12 @@ const navItems = [
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const router = useRouter();
+
+  async function handleLogout() {
+    await fetch("/api/auth", { method: "DELETE" });
+    router.push("/login");
+  }
 
   return (
     <aside className="w-64 bg-white border-r border-gray-200 flex flex-col h-screen sticky top-0">
@@ -64,10 +71,15 @@ export default function Sidebar() {
       </nav>
 
       {/* Footer */}
-      <div className="px-4 py-4 border-t border-gray-200">
-        <p className="text-xs text-gray-400">
-          © {new Date().getFullYear()} AIssociate SARL
-        </p>
+      <div className="px-4 py-4 border-t border-gray-200 space-y-2">
+        <button
+          onClick={handleLogout}
+          className="flex items-center gap-2 text-xs text-gray-400 hover:text-red-500 transition-colors w-full"
+        >
+          <LogOut className="w-3.5 h-3.5" />
+          Déconnexion
+        </button>
+        <p className="text-xs text-gray-400">© {new Date().getFullYear()} AIssociate SARL</p>
         <p className="text-xs text-gray-400">Qualiopi n°814211-1</p>
       </div>
     </aside>
