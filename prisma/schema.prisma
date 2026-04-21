@@ -1,0 +1,240 @@
+generator client {
+  provider = "prisma-client-js"
+  previewFeatures = ["driverAdapters"]
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model Client {
+  id                  String    @id @default(cuid())
+  // Identité
+  civilite            String?   // M. / Mme
+  nom                 String
+  prenom              String
+  nomNaissance        String?
+  dateNaissance       DateTime?
+  numeroSS            String?
+  // Entreprise
+  nomCommercial       String?
+  statutJuridique     String
+  activitePrincipale  String?
+  siret               String    @unique
+  codeApe             String
+  // Dirigeant
+  niveauDiplome       String?   // bac5 / bac3 / bac2 / bac_pro / bep_cap / fin_scolarite
+  ancienneteDirection String?   // moins_1an / 1_3ans / 4_10ans / plus_10ans
+  // Coordonnées
+  adresse             String?
+  codePostal          String?
+  ville               String?
+  email               String
+  telephone           String?
+  dateCreation        DateTime  @default(now())
+  dateMAJ             DateTime  @updatedAt
+  dossiers            Dossier[]
+
+  @@map("clients")
+}
+
+model Formation {
+  id              String    @id @default(cuid())
+  reference       String    @unique
+  intitule        String
+  programme       String
+  objectifs       String?
+  publicCible     String?
+  prerequis       String?
+  thematique      String?   // numerique / langues / commercial / gestion / rh / management / autre
+  moduleType      String?   // initiation / mise_a_jour / perfectionnement
+  typeQualification String? // sans / diplome_etat / titre_homol / qualification_branche / cqp / rncp
+  nomFormateur    String?
+  // Durées par modalité (en heures)
+  dureeHeures         Float
+  dureePresIndividuel Float?
+  dureePresCollectif  Float?
+  dureeDistSynchrone  Float?
+  dureeDistAsynchrone Float?
+  // Tarifs
+  tarifInterHT    Float
+  tarifIntraHT    Float
+  plafondAGEFICE  Float?
+  // Modalités
+  modalite              String    @default("presentiel")
+  formationEnEntreprise Boolean   @default(false)
+  certifiant            Boolean   @default(false)
+  eligibleCPF           Boolean   @default(false)
+  referenceRS     String?
+  actif           Boolean   @default(true)
+  dateCreation    DateTime  @default(now())
+  dateMAJ         DateTime  @updatedAt
+  dossiers        Dossier[]
+
+  @@map("formations")
+}
+
+model Dossier {
+  id                      String        @id @default(cuid())
+  numero                  String        @unique
+  clientId                String
+  client                  Client        @relation(fields: [clientId], references: [id])
+  formationId             String
+  formation               Formation     @relation(fields: [formationId], references: [id])
+  // Dates
+  dateDebut               DateTime
+  dateFin                 DateTime
+  dateLimiteDepot         DateTime
+  dateLimiteRemboursement DateTime
+  // Montants
+  montantHT               Float
+  tauxTVA                 Float         @default(0)
+  montantTTC              Float
+  // Type d'action
+  typeAction              String        @default("formation") // formation / bilan / vae / autre
+  formationObligatoire    Boolean       @default(false)
+  reconversion            Boolean       @default(false)
+  formationEnEntreprise   Boolean       @default(false)
+  // Modalité et lieu
+  modalite                String
+  lieuFormationAdresse    String?
+  lieuFormationCodePostal String?
+  lieuFormationVille      String?
+  // Formateur & participants
+  nomFormateur            String?
+  nombreParticipants      Int           @default(1)
+  // Durées réalisées par type (pour attestation assiduité)
+  dureePresIndividuel     Float?
+  dureePresCollectif      Float?
+  dureeDistSynchrone      Float?
+  dureeDistAsynchrone     Float?
+  dureePresIndividuelRealisee Float?
+  dureePresCollectifRealisee  Float?
+  dureeDistSynchroneRealisee  Float?
+  dureeDistAsynchroneRealisee Float?
+  // Modalités pédagogiques
+  modalitesDeroulement    String?
+  modalitesEvaluation     String?       // JSON array: ["questionnaires","travaux","releves","emargement"]
+  typeCertification       String?       // attestation / rncp / diplome_etat / autre_diplome
+  // Règlement (pour attestation assiduité si pas de facture)
+  modeReglement           String?
+  dateReglement           DateTime?
+  // Financement
+  typeFinancement         String?   // agefice / cpf / opco / region / france_travail / autofinancement / autre
+  nomFinanceur            String?   // nom libre (OPCO spécifique, etc.)
+  montantPriseEnCharge    Float?    // montant pris en charge par le financeur (€)
+  // Remise commerciale
+  remisePourcent          Float?    // remise en % (ex: 10 pour 10%)
+  remiseMontant           Float?    // remise en € (calculée automatiquement)
+  // Jours de session (JSON)
+  joursSession         String?   // JSON: [{date,heureDebut,heureFin,lieu}]
+  // Évaluation post-formation (JSON)
+  evaluationNotes      String?   // JSON: [{objectif,score,commentaire}] score: 0|1|2
+  notationGlobale      String?   // "favorable" | "a_ameliorer" | "insuffisant"
+  // Statut et suivi
+  statut                  String        @default("en_preparation")
+  notes                   String?
+  dateCreation            DateTime      @default(now())
+  dateMAJ                 DateTime      @updatedAt
+  documents               Document[]
+  pieces                  PieceClient[]
+  alertes                 Alerte[]
+
+  @@map("dossiers")
+}
+
+model Document {
+  id             String   @id @default(cuid())
+  dossierId      String
+  dossier        Dossier  @relation(fields: [dossierId], references: [id], onDelete: Cascade)
+  type           String
+  nomFichier     String?
+  urlStockage    String?
+  contenu        String?  // HTML stocké pour consultation ultérieure
+  dateGeneration DateTime @default(now())
+  signe          Boolean  @default(false)
+  valide         Boolean  @default(false)
+  signatureEleve String?  // JSON: { image: base64PNG, timestamp, userAgent }
+  signatureOF    String?  // JSON: { image: base64PNG, timestamp, userAgent }
+  tokenEleve     String?  @unique
+  tokenOF        String?  @unique
+
+  @@map("documents")
+}
+
+model PieceClient {
+  id          String    @id @default(cuid())
+  dossierId   String
+  dossier     Dossier   @relation(fields: [dossierId], references: [id], onDelete: Cascade)
+  typePiece   String
+  statut      String    @default("manquante")
+  url         String?
+  dateDepot   DateTime?
+  commentaire String?
+
+  @@map("pieces_client")
+}
+
+model Alerte {
+  id           String    @id @default(cuid())
+  dossierId    String
+  dossier      Dossier   @relation(fields: [dossierId], references: [id], onDelete: Cascade)
+  type         String
+  dateEcheance DateTime
+  envoyee      Boolean   @default(false)
+  dateEnvoi    DateTime?
+  canal        String    @default("email")
+
+  @@map("alertes")
+}
+
+model Parametre {
+  id          String  @id @default(cuid())
+  cle         String  @unique
+  valeur      String
+  description String?
+  categorie   String  @default("general")
+
+  @@map("parametres")
+}
+
+model Lead {
+  id                String    @id @default(cuid())
+  // Entreprise
+  nomEntreprise     String
+  siret             String?
+  siren             String?
+  codeApe           String?
+  secteurActivite   String?
+  chiffreAffaires   Float?    // en €
+  effectif          Int?      // nombre d'employés
+  adresse           String?
+  codePostal        String?
+  ville             String?
+  // Décideur
+  nomDirigeant      String
+  prenomDirigeant   String?
+  titrePoste        String?   // ex: "Directeur Général", "Owner" (Apify)
+  telephone         String?
+  email             String?
+  emailStatus       String?   // "deliverable" | "pattern_match" | "risky" (Apify)
+  linkedinUrl       String?   // profil LinkedIn du décideur (Apify)
+  // Contenu IA
+  descriptionEnjeux String?   // description des enjeux business
+  messagePrepare    String?   // message personnalisé généré
+  // Prospection
+  statut            String    @default("nouveau") // nouveau / contacte / repondu / qualifie / disqualifie
+  canalContact      String?   // whatsapp / email / telephone
+  dateContact       DateTime?
+  // Enrichissement
+  siteWeb           String?
+  // Feedback humain
+  scoreLead         Int?      // 1 (mauvais) à 5 (excellent)
+  feedbackHumain    String?
+  // Metadata
+  sourceDonnee      String?   @default("pappers") // pappers / manuel / import
+  dateDecouverte    DateTime  @default(now())
+  dateMAJ           DateTime  @updatedAt
+
+  @@map("leads")
+}
