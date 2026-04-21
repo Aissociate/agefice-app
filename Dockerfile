@@ -1,11 +1,10 @@
 FROM node:20-slim AS base
 
-# Dépendances système pour Puppeteer / Chrome
+# Dépendances système pour Puppeteer / Chrome (Debian Bookworm)
 RUN apt-get update && apt-get install -y \
   chromium \
   fonts-liberation \
-  libappindicator3-1 \
-  libasound2 \
+  libasound2t64 \
   libatk-bridge2.0-0 \
   libatk1.0-0 \
   libcups2 \
@@ -33,12 +32,16 @@ COPY package*.json ./
 RUN npm ci
 COPY . .
 RUN npx prisma generate
+# DATABASE_URL factice uniquement pour la compilation Next.js (pas d'accès DB réel)
+ENV DATABASE_URL=file:/tmp/build.db
+ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
 
 # ── Runner ───────────────────────────────────────────────────────────────────
 FROM base AS runner
 WORKDIR /app
 ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
 
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/.next/standalone ./

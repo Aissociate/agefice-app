@@ -1067,7 +1067,7 @@ export default function DossierDetailPage() {
                             const tokens = doc.tokenEleve
                               ? { tokenEleve: doc.tokenEleve, tokenOF: doc.tokenOF! }
                               : await handleGenererLiens(doc.id);
-                            if (tokens) ouvrirWhatsApp(dossier.client?.telephone, tokens.tokenEleve, "eleve");
+                            if (tokens) ouvrirWhatsApp(dossier.client?.telephone ?? undefined, tokens.tokenEleve, "eleve");
                           }}
                           className="flex items-center gap-1 text-xs text-green-700 hover:text-green-900 font-medium bg-green-50 hover:bg-green-100 px-2 py-1 rounded-lg border border-green-200"
                           title="Envoyer lien signature stagiaire par WhatsApp"
