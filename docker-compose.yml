@@ -11,6 +11,8 @@ services:
       - NODE_ENV=production
     env_file:
       - .env.production
+    command: >
+      sh -c "node_modules/.bin/prisma db push --skip-generate && node server.js"
 
   nginx:
     image: nginx:alpine
