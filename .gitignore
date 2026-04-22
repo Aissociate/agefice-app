@@ -46,6 +46,10 @@ next-env.d.ts
 prisma/dev.db
 prisma/dev.db-journal
 prisma/*.db-wal
+dev.db
+
+# Uploaded files
+public/uploads/emails/
 
 # Logs
 dev.log

@@ -3,7 +3,7 @@ import { prisma } from "@/lib/db";
 import { writeFile, mkdir } from "fs/promises";
 import path from "path";
 
-const ALLOWED_DOCS = ["qualiopi", "kbis"] as const;
+const ALLOWED_DOCS = ["qualiopi", "kbis", "catalogue"] as const;
 type DocType = (typeof ALLOWED_DOCS)[number];
 
 export async function POST(request: NextRequest) {

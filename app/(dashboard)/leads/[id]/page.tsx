@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import {
   ArrowLeft, Sparkles, MessageSquare, Mail, Phone, Building2,
   User, Star, Send, Copy, Check, Trash2, Edit3, Save,
-  Zap, Globe, CheckCircle2, XCircle, Loader2,
+  Zap, Globe, CheckCircle2, XCircle, Loader2, UserPlus, ExternalLink,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -36,6 +36,7 @@ interface Lead {
   feedbackHumain?: string | null;
   sourceDonnee?: string | null;
   dateDecouverte: string;
+  clientId?: string | null;
 }
 
 interface EnrichResult {
@@ -69,6 +70,7 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
   const [feedbackDraft, setFeedbackDraft] = useState("");
   const [copied, setCopied]               = useState(false);
   const [saving, setSaving]               = useState(false);
+  const [converting, setConverting]       = useState(false);
 
   useEffect(() => {
     fetch(`/api/leads/${id}`)
@@ -112,6 +114,16 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
   async function saveFeedback() {
     await updateField({ feedbackHumain: feedbackDraft });
     setEditingFeedback(false);
+  }
+
+  async function convertirEnClient() {
+    setConverting(true);
+    const res = await fetch(`/api/leads/${id}/convertir`, { method: "POST" });
+    const data = await res.json();
+    if (data.clientId) {
+      setLead((prev) => prev ? { ...prev, clientId: data.clientId, statut: "qualifie" } : prev);
+    }
+    setConverting(false);
   }
 
   async function deleteLead() {
@@ -171,6 +183,19 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
         </div>
         <div className="flex items-center gap-2">
           <span className={`px-3 py-1 rounded-full text-xs font-medium ${s.bg} ${s.text}`}>{s.label}</span>
+          {lead.clientId ? (
+            <Link href={`/clients/${lead.clientId}`}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-lg text-xs font-medium transition-colors">
+              <ExternalLink className="w-3.5 h-3.5" />
+              Voir la fiche client
+            </Link>
+          ) : (
+            <button onClick={convertirEnClient} disabled={converting}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1F4E79] hover:bg-[#2E75B6] text-white rounded-lg text-xs font-medium disabled:opacity-60 transition-colors">
+              {converting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <UserPlus className="w-3.5 h-3.5" />}
+              {converting ? "Conversion…" : "Convertir en client"}
+            </button>
+          )}
           <button onClick={deleteLead} className="p-2 text-gray-400 hover:text-red-600 transition-colors" title="Supprimer">
             <Trash2 className="w-4 h-4" />
           </button>

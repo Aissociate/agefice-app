@@ -21,7 +21,11 @@ export async function PATCH(
   const lead = await db.lead.update({
     where: { id },
     data: {
-      ...(body.statut !== undefined && { statut: body.statut }),
+      ...(body.statut !== undefined && {
+        statut: body.statut,
+        ...(body.statut === "qualifie" && { dateQualification: new Date() }),
+        ...(body.statut === "inscrit"  && { dateInscription: new Date() }),
+      }),
       ...(body.canalContact !== undefined && { canalContact: body.canalContact }),
       ...(body.dateContact !== undefined && {
         dateContact: body.dateContact ? new Date(body.dateContact) : null,

@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { Save, Check, Upload, FileText, ExternalLink } from "lucide-react";
 import { formatMontant } from "@/lib/utils";
 
-type Tab = "organisme" | "agefice" | "formations" | "alertes" | "email";
+type Tab = "organisme" | "agefice" | "formations" | "alertes" | "email" | "ia";
 
 interface Formation {
   id: string;
@@ -117,10 +117,11 @@ function OrganismeTab({
     org_responsable_tel: "",
     org_responsable_mail: "",
   });
-  const [docs, setDocs] = useState({ qualiopi: "", kbis: "" });
-  const [uploading, setUploading] = useState<"qualiopi" | "kbis" | null>(null);
-  const qualiopiRef = useRef<HTMLInputElement>(null);
-  const kbisRef     = useRef<HTMLInputElement>(null);
+  const [docs, setDocs] = useState({ qualiopi: "", kbis: "", catalogue: "" });
+  const [uploading, setUploading] = useState<"qualiopi" | "kbis" | "catalogue" | null>(null);
+  const qualiopiRef  = useRef<HTMLInputElement>(null);
+  const kbisRef      = useRef<HTMLInputElement>(null);
+  const catalogueRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     fetch("/api/parametres")
@@ -148,13 +149,14 @@ function OrganismeTab({
           org_responsable_mail: data.org_responsable_mail ?? "",
         });
         setDocs({
-          qualiopi: data.org_doc_qualiopi_url ?? "",
-          kbis:     data.org_doc_kbis_url ?? "",
+          qualiopi:  data.org_doc_qualiopi_url ?? "",
+          kbis:      data.org_doc_kbis_url ?? "",
+          catalogue: data.org_doc_catalogue_url ?? "",
         });
       });
   }, []);
 
-  async function handleUpload(docType: "qualiopi" | "kbis", file: File) {
+  async function handleUpload(docType: "qualiopi" | "kbis" | "catalogue", file: File) {
     setUploading(docType);
     try {
       const fd = new FormData();
@@ -168,7 +170,8 @@ function OrganismeTab({
       }
       const { url } = await res.json();
       setDocs((p) => ({ ...p, [docType]: url }));
-      onToast("success", `Document ${docType === "qualiopi" ? "Qualiopi" : "Kbis"} enregistré`);
+      const labels: Record<string, string> = { qualiopi: "Qualiopi", kbis: "Kbis", catalogue: "Catalogue de formation" };
+      onToast("success", `Document ${labels[docType] ?? docType} enregistré`);
     } catch {
       onToast("error", "Erreur réseau lors de l'upload");
     } finally {
@@ -200,7 +203,7 @@ function OrganismeTab({
     hint,
     inputRef,
   }: {
-    docType: "qualiopi" | "kbis";
+    docType: "qualiopi" | "kbis" | "catalogue";
     label: string;
     hint: string;
     inputRef: React.RefObject<HTMLInputElement | null>;
@@ -333,7 +336,7 @@ function OrganismeTab({
       {/* Documents administratifs */}
       <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
         <h2 className="text-base font-semibold text-gray-900">Documents administratifs</h2>
-        <p className="text-xs text-gray-500">Certificat Qualiopi et Kbis de l&apos;organisme — formats acceptés : PDF, JPG, PNG (max 10 Mo)</p>
+        <p className="text-xs text-gray-500">Certificat Qualiopi, Kbis et catalogue — formats acceptés : PDF, JPG, PNG (max 10 Mo)</p>
         <div className="space-y-3">
           <DocUploadZone
             docType="qualiopi"
@@ -346,6 +349,12 @@ function OrganismeTab({
             label="Extrait Kbis / Avis de situation SIRENE"
             hint="Document officiel d'immatriculation de l'organisme (moins de 3 mois)"
             inputRef={kbisRef}
+          />
+          <DocUploadZone
+            docType="catalogue"
+            label="Catalogue de formation"
+            hint="PDF envoyable en pièce jointe dans les mails clients"
+            inputRef={catalogueRef}
           />
         </div>
       </div>
@@ -889,11 +898,8 @@ function EmailTab({ onToast }: { onToast: (type: "success" | "error", msg: strin
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [form, setForm] = useState({
-    smtp_host: "",
-    smtp_port: "587",
-    smtp_user: "",
-    smtp_pass: "",
-    smtp_from: "",
+    smtp_host: "", smtp_port: "587", smtp_user: "", smtp_pass: "", smtp_from: "",
+    imap_host: "", imap_port: "993",
   });
 
   useEffect(() => {
@@ -901,11 +907,10 @@ function EmailTab({ onToast }: { onToast: (type: "success" | "error", msg: strin
       .then((r) => r.json())
       .then((data: Record<string, string>) => {
         setForm({
-          smtp_host: data.smtp_host ?? "",
-          smtp_port: data.smtp_port ?? "587",
-          smtp_user: data.smtp_user ?? "",
-          smtp_pass: data.smtp_pass ?? "",
+          smtp_host: data.smtp_host ?? "", smtp_port: data.smtp_port ?? "587",
+          smtp_user: data.smtp_user ?? "", smtp_pass: data.smtp_pass ?? "",
           smtp_from: data.smtp_from ?? "",
+          imap_host: data.imap_host ?? "", imap_port: data.imap_port ?? "993",
         });
       });
   }, []);
@@ -918,12 +923,11 @@ function EmailTab({ onToast }: { onToast: (type: "success" | "error", msg: strin
     try {
       const params = Object.entries(form).map(([cle, valeur]) => ({ cle, valeur }));
       const res = await fetch("/api/parametres", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ params }),
       });
       if (!res.ok) throw new Error();
-      onToast("success", "Configuration SMTP sauvegardée");
+      onToast("success", "Configuration email sauvegardée");
     } catch {
       onToast("error", "Erreur lors de la sauvegarde");
     } finally {
@@ -946,51 +950,228 @@ function EmailTab({ onToast }: { onToast: (type: "success" | "error", msg: strin
   }
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 divide-y divide-gray-100">
-      <div className="px-5 py-4">
-        <h2 className="font-semibold text-gray-900">Configuration SMTP</h2>
-        <p className="text-xs text-gray-400 mt-0.5">Serveur d&apos;envoi d&apos;emails (signature, alertes)</p>
+    <div className="space-y-4">
+      {/* SMTP */}
+      <div className="bg-white rounded-xl border border-gray-200 divide-y divide-gray-100">
+        <div className="px-5 py-4">
+          <h2 className="font-semibold text-gray-900">Envoi — SMTP</h2>
+          <p className="text-xs text-gray-400 mt-0.5">Serveur d&apos;envoi d&apos;emails (signature, alertes, conversations)</p>
+        </div>
+        <div className="px-5 py-5 space-y-4">
+          <div className="grid grid-cols-3 gap-4">
+            <div className="col-span-2">
+              <label className="block text-xs font-medium text-gray-600 mb-1">Serveur SMTP</label>
+              <input className={inputClass} value={form.smtp_host} onChange={set("smtp_host")} placeholder="smtp.gmail.com" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Port</label>
+              <input className={inputClass} value={form.smtp_port} onChange={set("smtp_port")} placeholder="587" />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Identifiant</label>
+              <input className={inputClass} value={form.smtp_user} onChange={set("smtp_user")} placeholder="vous@exemple.com" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Mot de passe</label>
+              <input className={inputClass} type="password" value={form.smtp_pass} onChange={set("smtp_pass")} placeholder="••••••••" />
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Email expéditeur</label>
+            <input className={inputClass} value={form.smtp_from} onChange={set("smtp_from")} placeholder="noreply@aissociate.re" />
+            <p className="text-xs text-gray-400 mt-1">Si vide, l&apos;identifiant est utilisé comme expéditeur.</p>
+          </div>
+          <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 text-xs text-blue-700">
+            <strong>Gmail :</strong> utilisez un <em>mot de passe d&apos;application</em>. &nbsp;
+            <strong>OVH / IONOS :</strong> smtp.mail.ovh.net · port 587
+          </div>
+        </div>
+        <div className="px-5 py-4 flex justify-between items-center">
+          <button onClick={handleTest} disabled={testing || !form.smtp_host}
+            className="text-sm text-indigo-600 hover:text-indigo-800 font-medium disabled:opacity-40">
+            {testing ? "Envoi en cours…" : "Envoyer un email de test"}
+          </button>
+          <SaveButton onClick={handleSave} loading={saving} />
+        </div>
       </div>
-      <div className="px-5 py-5 space-y-4">
-        <div className="grid grid-cols-3 gap-4">
-          <div className="col-span-2">
-            <label className="block text-xs font-medium text-gray-600 mb-1">Serveur SMTP</label>
-            <input className={inputClass} value={form.smtp_host} onChange={set("smtp_host")} placeholder="smtp.gmail.com" />
+
+      {/* IMAP */}
+      <div className="bg-white rounded-xl border border-gray-200 divide-y divide-gray-100">
+        <div className="px-5 py-4">
+          <h2 className="font-semibold text-gray-900">Réception — IMAP</h2>
+          <p className="text-xs text-gray-400 mt-0.5">
+            Permet de récupérer les réponses clients directement dans les conversations.
+            Identifiant et mot de passe identiques au SMTP.
+          </p>
+        </div>
+        <div className="px-5 py-5 space-y-4">
+          <div className="grid grid-cols-3 gap-4">
+            <div className="col-span-2">
+              <label className="block text-xs font-medium text-gray-600 mb-1">Serveur IMAP</label>
+              <input className={inputClass} value={form.imap_host} onChange={set("imap_host")} placeholder="imap.gmail.com" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Port</label>
+              <input className={inputClass} value={form.imap_port} onChange={set("imap_port")} placeholder="993" />
+            </div>
           </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Port</label>
-            <input className={inputClass} value={form.smtp_port} onChange={set("smtp_port")} placeholder="587" />
+          <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 text-xs text-blue-700">
+            <strong>Gmail :</strong> imap.gmail.com · port 993 &nbsp;|&nbsp;
+            <strong>OVH / IONOS :</strong> imap.mail.ovh.net · port 993
           </div>
         </div>
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Identifiant</label>
-            <input className={inputClass} value={form.smtp_user} onChange={set("smtp_user")} placeholder="vous@exemple.com" />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Mot de passe</label>
-            <input className={inputClass} type="password" value={form.smtp_pass} onChange={set("smtp_pass")} placeholder="••••••••" />
-          </div>
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-gray-600 mb-1">Email expéditeur</label>
-          <input className={inputClass} value={form.smtp_from} onChange={set("smtp_from")} placeholder="noreply@aissociate.re" />
-          <p className="text-xs text-gray-400 mt-1">Si vide, l&apos;identifiant est utilisé comme expéditeur.</p>
-        </div>
-        <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 text-xs text-blue-700">
-          <strong>Gmail :</strong> utilisez un <em>mot de passe d&apos;application</em> (pas votre mot de passe Google). <br />
-          <strong>OVH / IONOS :</strong> smtp.mail.ovh.net · port 587
+        <div className="px-5 py-4 flex justify-end">
+          <SaveButton onClick={handleSave} loading={saving} />
         </div>
       </div>
-      <div className="px-5 py-4 flex justify-between items-center">
-        <button
-          onClick={handleTest}
-          disabled={testing || !form.smtp_host}
-          className="text-sm text-indigo-600 hover:text-indigo-800 font-medium disabled:opacity-40"
-        >
-          {testing ? "Envoi en cours…" : "Envoyer un email de test"}
-        </button>
-        <SaveButton onClick={handleSave} loading={saving} />
+    </div>
+  );
+}
+
+// ===================== IA TAB =====================
+function IATab({ onToast }: { onToast: (type: "success" | "error", msg: string) => void }) {
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState({
+    ia_modele: "claude-haiku-4-5-20251001",
+    ia_temperature: "0.7",
+    ia_prompt_systeme: "",
+  });
+
+  useEffect(() => {
+    fetch("/api/parametres")
+      .then((r) => r.json())
+      .then((data: Record<string, string>) => {
+        setForm({
+          ia_modele: data.ia_modele ?? "claude-haiku-4-5-20251001",
+          ia_temperature: data.ia_temperature ?? "0.7",
+          ia_prompt_systeme: data.ia_prompt_systeme ?? "",
+        });
+      });
+  }, []);
+
+  async function handleSave() {
+    setSaving(true);
+    try {
+      const params = Object.entries(form).map(([cle, valeur]) => ({ cle, valeur }));
+      const res = await fetch("/api/parametres", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ params }),
+      });
+      if (!res.ok) throw new Error();
+      onToast("success", "Paramètres IA sauvegardés");
+    } catch {
+      onToast("error", "Erreur lors de la sauvegarde");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const MODELES = [
+    { id: "claude-haiku-4-5-20251001", label: "Claude Haiku 4.5 — rapide, économique" },
+    { id: "claude-sonnet-4-6", label: "Claude Sonnet 4.6 — équilibré" },
+    { id: "claude-opus-4-7", label: "Claude Opus 4.7 — le plus puissant" },
+  ];
+
+  const DEFAULT_PROMPT = `Tu es un assistant administratif expert en gestion de formations professionnelles pour l'AGEFICE. Tu rédiges des emails professionnels, clairs et bienveillants. Tes emails sont concis, en français, avec une formule de politesse adaptée. Tu n'inventes jamais d'informations.`;
+
+  return (
+    <div className="space-y-5">
+      <div className="bg-white rounded-xl border border-gray-200 divide-y divide-gray-100">
+        <div className="px-5 py-4">
+          <h2 className="font-semibold text-gray-900">Paramètres IA — Rédaction d&apos;emails</h2>
+          <p className="text-xs text-gray-400 mt-0.5">
+            Configure le comportement du modèle Claude pour la génération de brouillons
+          </p>
+        </div>
+
+        <div className="px-5 py-5 space-y-5">
+          {/* Modèle */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Modèle Claude</label>
+            <div className="space-y-2">
+              {MODELES.map((m) => (
+                <label key={m.id} className="flex items-center gap-3 cursor-pointer group">
+                  <input
+                    type="radio"
+                    name="ia_modele"
+                    value={m.id}
+                    checked={form.ia_modele === m.id}
+                    onChange={() => setForm((p) => ({ ...p, ia_modele: m.id }))}
+                    className="accent-[#1F4E79]"
+                  />
+                  <span className="text-sm text-gray-700 group-hover:text-gray-900">{m.label}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          {/* Température */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Température —{" "}
+              <span className="font-normal text-gray-500">
+                {parseFloat(form.ia_temperature) <= 0.3
+                  ? "Très factuelle"
+                  : parseFloat(form.ia_temperature) <= 0.6
+                  ? "Équilibrée"
+                  : parseFloat(form.ia_temperature) <= 0.8
+                  ? "Créative"
+                  : "Très créative"}
+              </span>
+            </label>
+            <div className="flex items-center gap-4">
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.05"
+                value={form.ia_temperature}
+                onChange={(e) => setForm((p) => ({ ...p, ia_temperature: e.target.value }))}
+                className="w-64 accent-[#1F4E79]"
+              />
+              <span className="text-sm font-mono text-gray-700 w-10">{form.ia_temperature}</span>
+            </div>
+            <p className="text-xs text-gray-400 mt-1">
+              Valeur basse = emails plus prévisibles · Valeur haute = formulations plus variées
+            </p>
+          </div>
+
+          {/* Prompt système */}
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-sm font-medium text-gray-700">Prompt système</label>
+              <button
+                type="button"
+                onClick={() => setForm((p) => ({ ...p, ia_prompt_systeme: DEFAULT_PROMPT }))}
+                className="text-xs text-blue-600 hover:text-blue-800"
+              >
+                Remettre par défaut
+              </button>
+            </div>
+            <textarea
+              rows={6}
+              value={form.ia_prompt_systeme || DEFAULT_PROMPT}
+              onChange={(e) => setForm((p) => ({ ...p, ia_prompt_systeme: e.target.value }))}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none font-mono"
+              placeholder={DEFAULT_PROMPT}
+            />
+            <p className="text-xs text-gray-400 mt-1">
+              Ce prompt définit le ton et le comportement général de l&apos;IA. Il est injecté au début de chaque génération de brouillon.
+            </p>
+          </div>
+        </div>
+
+        <div className="px-5 py-4 flex justify-end">
+          <SaveButton onClick={handleSave} loading={saving} />
+        </div>
+      </div>
+
+      {/* Info box */}
+      <div className="bg-amber-50 border border-amber-100 rounded-xl p-4 text-sm text-amber-800">
+        <strong>Contexte automatiquement injecté :</strong> lors de la génération d&apos;un brouillon, l&apos;IA reçoit automatiquement les informations du client (nom, entreprise, SIRET, email), ses notes internes, ses dossiers récents, et l&apos;historique de la conversation email.
       </div>
     </div>
   );
@@ -1015,6 +1196,7 @@ export default function ParametresPage() {
     { key: "formations", label: "Formations" },
     { key: "alertes", label: "Alertes" },
     { key: "email", label: "Email SMTP" },
+    { key: "ia", label: "IA / Rédaction" },
   ];
 
   return (
@@ -1045,6 +1227,7 @@ export default function ParametresPage() {
         {tab === "formations" && <FormationsTab onToast={handleToast} />}
         {tab === "alertes" && <AlertesTab onToast={handleToast} />}
         {tab === "email" && <EmailTab onToast={handleToast} />}
+        {tab === "ia" && <IATab onToast={handleToast} />}
       </div>
     </div>
   );
