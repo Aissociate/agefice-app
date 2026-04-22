@@ -49,3 +49,4 @@ prisma/*.db-wal
 
 # Logs
 dev.log
+.env
