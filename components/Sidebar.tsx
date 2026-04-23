@@ -13,6 +13,7 @@ import {
   Target,
   Mail,
   CalendarDays,
+  PenSquare,
 } from "lucide-react";
 
 const navItems = [
@@ -22,6 +23,7 @@ const navItems = [
   { href: "/formations",   label: "Formations",       icon: BookOpen        },
   { href: "/leads",        label: "Prospection",      icon: Target          },
   { href: "/calendrier",   label: "Calendrier",       icon: CalendarDays    },
+  { href: "/contenu",      label: "Contenu",          icon: PenSquare       },
   { href: "/parametres",   label: "Paramètres",       icon: Settings        },
 ];
 

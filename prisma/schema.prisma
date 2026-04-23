@@ -291,3 +291,24 @@ model Lead {
 
   @@map("leads")
 }
+
+model PostBlog {
+  id           String   @id @default(cuid())
+  titre        String
+  accroche     String?
+  introduction String?
+  sections     String?
+  conclusion   String?
+  motsCles     String?
+  hashtags     String?
+  photoUrl     String?
+  photoCaption String?
+  sujet        String?
+  ton          String?
+  publicCible  String?
+  statut       String   @default("brouillon")
+  dateCreation DateTime @default(now())
+  dateMAJ      DateTime @updatedAt
+
+  @@map("posts_blog")
+}
