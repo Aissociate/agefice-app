@@ -48,13 +48,18 @@ export async function POST(
       pdfBuffer = await htmlToPdf(doc.contenu);
     }
 
+    let toEmail: string;
+    let toName: string;
+
     if (role === "eleve") {
       if (!client.email) {
         return NextResponse.json({ error: "Le client n'a pas d'email renseigné" }, { status: 400 });
       }
+      toEmail = client.email;
+      toName = `${client.prenom} ${client.nom}`;
       await sendSignatureEmail({
-        to: client.email,
-        toName: `${client.prenom} ${client.nom}`,
+        to: toEmail,
+        toName,
         role: "eleve",
         docLabel,
         dossierNumero: doc.dossier.numero,
@@ -70,9 +75,11 @@ export async function POST(
         return NextResponse.json({ error: "Email de l'OF non configuré dans les paramètres" }, { status: 400 });
       }
       const orgNomParam = await prisma.parametre.findUnique({ where: { cle: "org_nom" } });
+      toEmail = ofEmail;
+      toName = orgNomParam?.valeur ?? "Formateur";
       await sendSignatureEmail({
-        to: ofEmail,
-        toName: orgNomParam?.valeur ?? "Formateur",
+        to: toEmail,
+        toName,
         role: "of",
         docLabel,
         dossierNumero: doc.dossier.numero,
@@ -82,6 +89,40 @@ export async function POST(
         pdfFilename,
       });
     }
+
+    // Log the sent email in a dedicated administrative conversation for the client
+    const smtpParams = await prisma.parametre.findMany({ where: { cle: { in: ["smtp_from", "smtp_user", "org_nom"] } } });
+    const getP = (k: string) => smtpParams.find((p) => p.cle === k)?.valeur ?? "";
+    const fromEmail = getP("smtp_from") || getP("smtp_user") || "noreply@agefice.fr";
+    const orgNomForLog = getP("org_nom") || "AIssociate";
+    const convSubject = `[Dossier ${doc.dossier.numero}] Correspondance administrative`;
+
+    const existingConv = await prisma.conversationEmail.findFirst({
+      where: { clientId: client.id, sujet: convSubject },
+    });
+
+    const convId = existingConv?.id ?? (await prisma.conversationEmail.create({
+      data: { clientId: client.id, sujet: convSubject },
+    })).id;
+
+    await prisma.messageEmail.create({
+      data: {
+        conversationId: convId,
+        direction: "sortant",
+        expediteur: `"${orgNomForLog}" <${fromEmail}>`,
+        destinataire: toEmail,
+        sujet: `Signature requise — ${docLabel} — Dossier ${doc.dossier.numero}`,
+        contenu: `Demande de signature envoyée à ${toName} pour le document : ${docLabel}. Lien de signature : ${signingUrl}`,
+        envoye: true,
+        dateEnvoi: new Date(),
+        lu: true,
+      },
+    });
+
+    await prisma.conversationEmail.update({
+      where: { id: convId },
+      data: { updatedAt: new Date() },
+    });
 
     return NextResponse.json({ ok: true });
   } catch (error) {

@@ -87,7 +87,8 @@ export async function POST(request: NextRequest) {
     const parsedDateDebut = new Date(dateDebut);
     const parsedDateFin = new Date(dateFin);
     const tva = tauxTVA ?? 0;
-    const montantTTC = montantHT * (1 + tva / 100);
+    const remiseMt = remisePourcent ? montantHT * Number(remisePourcent) / 100 : (Number(remiseMontant) || 0);
+    const montantTTC = (montantHT - remiseMt) * (1 + tva / 100);
     const dateLimiteDepot = calculerDateLimiteDepot(parsedDateDebut);
     const dateLimiteRemboursement = calculerDateLimiteRemboursement(parsedDateFin);
     const numero = generateNumero();

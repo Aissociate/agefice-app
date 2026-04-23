@@ -118,10 +118,13 @@ export async function PUT(
     if (evaluationNotes !== undefined) updateData.evaluationNotes = evaluationNotes ? JSON.stringify(evaluationNotes) : null;
     if (notationGlobale !== undefined) updateData.notationGlobale = notationGlobale || null;
 
-    if (montantHT !== undefined || tauxTVA !== undefined) {
-      const finalMontantHT = montantHT ?? existing.montantHT;
-      const finalTauxTVA = tauxTVA ?? existing.tauxTVA;
-      updateData.montantTTC = finalMontantHT * (1 + finalTauxTVA / 100);
+    if (montantHT !== undefined || tauxTVA !== undefined || remisePourcent !== undefined || remiseMontant !== undefined) {
+      const finalMontantHT = updateData.montantHT ?? existing.montantHT;
+      const finalTauxTVA = updateData.tauxTVA ?? existing.tauxTVA;
+      const finalRemisePct = updateData.remisePourcent ?? existing.remisePourcent ?? 0;
+      const finalRemiseMt = updateData.remiseMontant ?? existing.remiseMontant ?? 0;
+      const remiseFinal = finalRemisePct ? finalMontantHT * finalRemisePct / 100 : finalRemiseMt;
+      updateData.montantTTC = (finalMontantHT - remiseFinal) * (1 + finalTauxTVA / 100);
     }
 
     const dossier = await prisma.dossier.update({

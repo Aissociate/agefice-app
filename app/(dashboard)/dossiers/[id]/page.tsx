@@ -13,6 +13,9 @@ import {
   Upload,
   Download,
   Trash2,
+  Mail,
+  ChevronDown,
+  Shield,
 } from "lucide-react";
 import {
   formatDate,
@@ -28,6 +31,27 @@ import {
   TYPES_FINANCEMENT,
   StatutDossier,
 } from "@/lib/utils";
+
+interface MessageEmail {
+  id: string;
+  direction: "entrant" | "sortant";
+  expediteur: string;
+  destinataire: string;
+  sujet?: string | null;
+  contenu: string;
+  envoye: boolean;
+  dateEnvoi?: string | null;
+  createdAt: string;
+  lu: boolean;
+}
+
+interface ConversationEmail {
+  id: string;
+  sujet: string;
+  updatedAt: string;
+  messages: MessageEmail[];
+  _count?: { messages: number };
+}
 
 interface Piece {
   id: string;
@@ -83,7 +107,7 @@ interface Dossier {
   remisePourcent?: number | null;
   remiseMontant?: number | null;
   notes?: string | null;
-  client: { id: string; nom: string; prenom: string; siret: string; statutJuridique: string; telephone?: string | null };
+  client: { id: string; nom: string; prenom: string; siret: string; statutJuridique: string; telephone?: string | null; email?: string | null };
   formation: { id: string; reference: string; intitule: string; dureeHeures: number };
   pieces: Piece[];
   documents: Document[];
@@ -161,6 +185,10 @@ export default function DossierDetailPage() {
     remiseMontant: "",
   });
 
+  const [conversations, setConversations] = useState<ConversationEmail[]>([]);
+  const [openConvId, setOpenConvId] = useState<string | null>(null);
+  const [convMessages, setConvMessages] = useState<Record<string, MessageEmail[]>>({});
+
   const loadDossier = useCallback(async () => {
     const res = await fetch(`/api/dossiers/${id}`);
     if (res.ok) {
@@ -188,9 +216,35 @@ export default function DossierDetailPage() {
     setLoading(false);
   }, [id]);
 
+  const loadConversations = useCallback(async (clientId: string) => {
+    try {
+      const res = await fetch(`/api/clients/${clientId}/conversations`);
+      if (res.ok) {
+        const data: ConversationEmail[] = await res.json();
+        setConversations(data);
+      }
+    } catch {}
+  }, []);
+
   useEffect(() => {
     loadDossier();
   }, [loadDossier]);
+
+  useEffect(() => {
+    if (dossier?.client?.id) loadConversations(dossier.client.id);
+  }, [dossier?.client?.id, loadConversations]);
+
+  async function openConversation(convId: string, clientId: string) {
+    setOpenConvId(prev => prev === convId ? null : convId);
+    if (convMessages[convId]) return;
+    try {
+      const res = await fetch(`/api/clients/${clientId}/conversations/${convId}/messages`);
+      if (res.ok) {
+        const msgs: MessageEmail[] = await res.json();
+        setConvMessages(prev => ({ ...prev, [convId]: msgs }));
+      }
+    } catch {}
+  }
 
   function showToastMsg(type: "success" | "error", msg: string) {
     setToast({ type, msg });
@@ -396,7 +450,13 @@ export default function DossierDetailPage() {
       });
       const data = await res.json();
       if (!res.ok) showToastMsg("error", data.error ?? "Erreur lors de l'envoi");
-      else showToastMsg("success", `Email envoyé au ${role === "eleve" ? "stagiaire" : "formateur/OF"} ✓`);
+      else {
+        showToastMsg("success", `Email envoyé au ${role === "eleve" ? "stagiaire" : "formateur/OF"} ✓`);
+        if (dossier?.client?.id) {
+          setConvMessages({});
+          loadConversations(dossier.client.id);
+        }
+      }
     } catch {
       showToastMsg("error", "Erreur réseau");
     }
@@ -1175,6 +1235,104 @@ export default function DossierDetailPage() {
             {savingNotes ? "Sauvegarde..." : "Sauvegarder"}
           </button>
         </div>
+      </div>
+
+      {/* Correspondance */}
+      <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <Mail className="w-4 h-4 text-gray-500" />
+            <h2 className="font-semibold text-gray-900">Correspondance</h2>
+          </div>
+          <Link
+            href={`/clients/${dossier.client.id}`}
+            className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+          >
+            Voir fiche client →
+          </Link>
+        </div>
+
+        {conversations.length === 0 ? (
+          <p className="text-sm text-gray-400 text-center py-6">Aucune correspondance pour ce client</p>
+        ) : (
+          <div className="space-y-2">
+            {conversations.map((conv) => {
+              const isAdmin = conv.sujet.startsWith("[Dossier");
+              const isOpen = openConvId === conv.id;
+              const msgs = convMessages[conv.id] ?? [];
+              const lastMsg = conv.messages?.[0];
+              return (
+                <div key={conv.id} className={`border rounded-lg overflow-hidden ${isAdmin ? "border-blue-200 bg-blue-50/30" : "border-gray-200"}`}>
+                  <button
+                    onClick={() => openConversation(conv.id, dossier.client.id)}
+                    className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-gray-50 transition-colors"
+                  >
+                    {isAdmin ? (
+                      <Shield className="w-4 h-4 text-blue-600 shrink-0" />
+                    ) : (
+                      <Mail className="w-4 h-4 text-gray-400 shrink-0" />
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-900 truncate">{conv.sujet}</p>
+                      {lastMsg && (
+                        <p className="text-xs text-gray-500 truncate mt-0.5">
+                          {lastMsg.direction === "sortant" ? "Envoyé" : "Reçu"} ·{" "}
+                          {new Date(lastMsg.dateEnvoi ?? lastMsg.createdAt).toLocaleDateString("fr-FR", {
+                            day: "2-digit", month: "short", year: "numeric",
+                          })}
+                        </p>
+                      )}
+                    </div>
+                    {isAdmin && (
+                      <span className="text-[10px] font-medium bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full shrink-0">
+                        Administratif
+                      </span>
+                    )}
+                    <ChevronDown className={`w-4 h-4 text-gray-400 shrink-0 transition-transform ${isOpen ? "rotate-180" : ""}`} />
+                  </button>
+
+                  {isOpen && (
+                    <div className="border-t border-gray-100 px-4 py-3 space-y-3 bg-white">
+                      {msgs.length === 0 ? (
+                        <p className="text-xs text-gray-400 text-center py-2">Chargement...</p>
+                      ) : (
+                        msgs.map((msg) => (
+                          <div
+                            key={msg.id}
+                            className={`flex ${msg.direction === "sortant" ? "justify-end" : "justify-start"}`}
+                          >
+                            <div
+                              className={`max-w-[85%] rounded-xl px-3 py-2 text-xs ${
+                                msg.direction === "sortant"
+                                  ? "bg-blue-700 text-white"
+                                  : "bg-gray-100 text-gray-800"
+                              }`}
+                            >
+                              <p className={`font-medium mb-1 ${msg.direction === "sortant" ? "text-blue-200" : "text-gray-500"}`}>
+                                {msg.direction === "sortant" ? `→ ${msg.destinataire}` : `← ${msg.expediteur}`}
+                              </p>
+                              {msg.sujet && msg.sujet !== conv.sujet && (
+                                <p className={`italic mb-1 ${msg.direction === "sortant" ? "text-blue-300" : "text-gray-500"}`}>
+                                  {msg.sujet}
+                                </p>
+                              )}
+                              <p className="leading-relaxed whitespace-pre-wrap">{msg.contenu.replace(/<[^>]+>/g, " ").trim()}</p>
+                              <p className={`mt-1.5 text-[10px] ${msg.direction === "sortant" ? "text-blue-300" : "text-gray-400"}`}>
+                                {new Date(msg.dateEnvoi ?? msg.createdAt).toLocaleString("fr-FR", {
+                                  day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit",
+                                })}
+                              </p>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* Client & Formation links */}

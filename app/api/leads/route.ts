@@ -63,6 +63,7 @@ export async function POST(req: NextRequest) {
       messagePrepare: body.messagePrepare || null,
       statut: body.statut || "nouveau",
       sourceDonnee: body.sourceDonnee || "manuel",
+      clientId: body.clientId || null,
     },
   });
 

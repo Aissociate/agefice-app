@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
 import {
   ArrowLeft, Plus, Mail, Phone, MapPin, Building2, User,
@@ -36,7 +36,7 @@ interface Client {
   email: string; telephone?: string | null; adresse?: string | null;
   codePostal?: string | null; ville?: string | null;
   dossiers: Dossier[];
-  lead?: { id: string } | null;
+  lead?: { id: string; statut: string } | null;
 }
 
 const ACTIONS = [
@@ -279,16 +279,25 @@ function DraftModal({
 }) {
   const [action, setAction] = useState("accueil");
   const [instruction, setInstruction] = useState("");
+  const [formationChoisie, setFormationChoisie] = useState("");
   const [draft, setDraft] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [allFormations, setAllFormations] = useState<{ id: string; intitule: string; reference: string }[]>([]);
+
+  useEffect(() => {
+    fetch("/api/formations?actif=true")
+      .then((r) => r.json())
+      .then((data) => { if (Array.isArray(data)) setAllFormations(data); })
+      .catch(() => {});
+  }, []);
 
   async function generate() {
     setLoading(true); setError(""); setDraft("");
     try {
       const res = await fetch(`/api/clients/${clientId}/draft`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action, convId, instruction }),
+        body: JSON.stringify({ action, convId, instruction, formationChoisie: formationChoisie || undefined }),
       });
       const data = await res.json();
       if (!res.ok) { setError(data.error || "Erreur"); return; }
@@ -321,6 +330,23 @@ function DraftModal({
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
             >
               {ACTIONS.map((a) => <option key={a.value} value={a.value}>{a.label}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Formation concernée <span className="font-normal text-gray-400">(optionnel)</span>
+            </label>
+            <select
+              value={formationChoisie}
+              onChange={(e) => setFormationChoisie(e.target.value)}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+            >
+              <option value="">— Aucune formation spécifique —</option>
+              {allFormations.map((f) => (
+                <option key={f.id} value={f.intitule}>
+                  {f.intitule}{f.reference ? ` (${f.reference})` : ""}
+                </option>
+              ))}
             </select>
           </div>
           <div>
@@ -384,11 +410,12 @@ function DraftModal({
 // ─── Compose Form ─────────────────────────────────────────────────────────────
 function ComposeForm({
   clientId, clientEmail, orgEmail,
-  convId, defaultSubject, catalogueUrl,
+  convId, defaultSubject, catalogueUrl, formations,
   onSent, onCancel,
 }: {
   clientId: string; clientEmail: string; orgEmail: string;
   convId?: string; defaultSubject?: string; catalogueUrl?: string;
+  formations?: { intitule: string; numero: string }[];
   onSent: (conv?: Conversation) => void; onCancel: () => void;
 }) {
   const [sujet, setSujet] = useState(defaultSubject || "");
@@ -555,10 +582,11 @@ function ComposeForm({
 
 // ─── Thread View ─────────────────────────────────────────────────────────────
 function ThreadView({
-  conv, clientId, clientEmail, orgEmail, clientPrenom, catalogueUrl,
+  conv, clientId, clientEmail, orgEmail, clientPrenom, catalogueUrl, formations,
   onBack, onUpdate,
 }: {
   conv: Conversation; clientId: string; clientEmail: string; orgEmail: string; clientPrenom: string; catalogueUrl?: string;
+  formations?: { intitule: string; numero: string }[];
   onBack: () => void; onUpdate: (conv: Conversation) => void;
 }) {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -765,6 +793,7 @@ function ThreadView({
         <ComposeForm
           clientId={clientId} clientEmail={clientEmail} orgEmail={orgEmail}
           convId={conv.id} defaultSubject={conv.sujet} catalogueUrl={catalogueUrl}
+          formations={formations}
           onSent={() => { reload(); setReplying(false); }} onCancel={() => setReplying(false)}
         />
       )}
@@ -773,8 +802,9 @@ function ThreadView({
 }
 
 // ─── Conversations Tab ────────────────────────────────────────────────────────
-function ConversationsTab({ clientId, clientEmail, orgEmail, clientPrenom }: {
+function ConversationsTab({ clientId, clientEmail, orgEmail, clientPrenom, formations }: {
   clientId: string; clientEmail: string; orgEmail: string; clientPrenom: string;
+  formations?: { intitule: string; numero: string }[];
 }) {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selected, setSelected] = useState<Conversation | null>(null);
@@ -851,7 +881,7 @@ function ConversationsTab({ clientId, clientEmail, orgEmail, clientPrenom }: {
     return (
       <ThreadView
         conv={selected} clientId={clientId} clientEmail={clientEmail} orgEmail={orgEmail}
-        clientPrenom={clientPrenom} catalogueUrl={catalogueUrl}
+        clientPrenom={clientPrenom} catalogueUrl={catalogueUrl} formations={formations}
         onBack={() => setSelected(null)} onUpdate={updateConv}
       />
     );
@@ -904,7 +934,7 @@ function ConversationsTab({ clientId, clientEmail, orgEmail, clientPrenom }: {
       {composing && (
         <ComposeForm
           clientId={clientId} clientEmail={clientEmail} orgEmail={orgEmail}
-          catalogueUrl={catalogueUrl}
+          catalogueUrl={catalogueUrl} formations={formations}
           onSent={(conv) => conv && handleNewConv(conv)} onCancel={() => setComposing(false)}
         />
       )}
@@ -967,11 +997,78 @@ function ConversationsTab({ clientId, clientEmail, orgEmail, clientPrenom }: {
   );
 }
 
+// ─── Pipeline statuts ─────────────────────────────────────────────────────────
+const PIPELINE_STATUTS = [
+  { value: "nouveau",      label: "Nouveau",       color: "bg-gray-100 text-gray-700 border-gray-300" },
+  { value: "contacte",     label: "Contacté",      color: "bg-blue-100 text-blue-700 border-blue-300" },
+  { value: "repondu",      label: "Répondu",       color: "bg-indigo-100 text-indigo-700 border-indigo-300" },
+  { value: "qualifie",     label: "Qualifié",      color: "bg-amber-100 text-amber-700 border-amber-300" },
+  { value: "inscrit",      label: "Inscrit",       color: "bg-green-100 text-green-700 border-green-300" },
+  { value: "disqualifie",  label: "Disqualifié",   color: "bg-red-100 text-red-700 border-red-300" },
+] as const;
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 type ClientTab = "informations" | "dossiers" | "notes" | "conversations";
 
 export default function ClientDetail({ client, orgEmail }: { client: Client; orgEmail: string }) {
   const [tab, setTab] = useState<ClientTab>("informations");
+  const [leadStatut, setLeadStatut] = useState(client.lead?.statut ?? "nouveau");
+  const [leadId, setLeadId] = useState<string | null>(client.lead?.id ?? null);
+  const [showPipelineMenu, setShowPipelineMenu] = useState(false);
+  const [savingStatut, setSavingStatut] = useState(false);
+
+  const closePipelineMenu = useCallback((e: MouseEvent) => {
+    const target = e.target as HTMLElement;
+    if (!target.closest("[data-pipeline-menu]")) setShowPipelineMenu(false);
+  }, []);
+
+  useEffect(() => {
+    if (showPipelineMenu) document.addEventListener("mousedown", closePipelineMenu);
+    else document.removeEventListener("mousedown", closePipelineMenu);
+    return () => document.removeEventListener("mousedown", closePipelineMenu);
+  }, [showPipelineMenu, closePipelineMenu]);
+
+  async function handleLeadStatutChange(newStatut: string) {
+    setSavingStatut(true);
+    setShowPipelineMenu(false);
+    try {
+      if (leadId) {
+        // Lead existant : simple PATCH
+        const res = await fetch(`/api/leads/${leadId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ statut: newStatut }),
+        });
+        if (res.ok) setLeadStatut(newStatut);
+      } else {
+        // Pas de lead : on en crée un lié au client
+        const res = await fetch("/api/leads", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            nomEntreprise: client.nomCommercial || `${client.prenom} ${client.nom}`,
+            nomDirigeant: client.nom,
+            prenomDirigeant: client.prenom,
+            siret: client.siret || null,
+            telephone: client.telephone || null,
+            email: client.email || null,
+            adresse: client.adresse || null,
+            codePostal: client.codePostal || null,
+            ville: client.ville || null,
+            statut: newStatut,
+            clientId: client.id,
+          }),
+        });
+        if (res.ok) {
+          const lead = await res.json();
+          setLeadId(lead.id);
+          setLeadStatut(newStatut);
+        }
+      }
+    } finally {
+      setSavingStatut(false);
+    }
+  }
 
   const tabs: { key: ClientTab; label: string; icon: React.ElementType }[] = [
     { key: "informations", label: "Informations", icon: User },
@@ -990,12 +1087,47 @@ export default function ClientDetail({ client, orgEmail }: { client: Client; org
         <div className="flex-1">
           <div className="flex items-center gap-2">
             <h1 className="text-2xl font-bold text-gray-900">{client.prenom} {client.nom}</h1>
-            {client.lead && (
-              <Link href={`/leads/${client.lead.id}`}
-                className="flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 hover:bg-blue-200 transition-colors">
-                Source : Lead →
-              </Link>
-            )}
+            {(() => {
+              const current = PIPELINE_STATUTS.find(s => s.value === leadStatut);
+              return (
+                <div className="relative" data-pipeline-menu>
+                  <button
+                    onClick={() => setShowPipelineMenu(p => !p)}
+                    disabled={savingStatut}
+                    className={`flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full border transition-colors disabled:opacity-50 ${current?.color ?? "bg-gray-100 text-gray-700 border-gray-300"}`}
+                  >
+                    {savingStatut ? "..." : `Pipeline : ${current?.label ?? "Non suivi"}`}
+                    <span className="opacity-60">▾</span>
+                  </button>
+                  {showPipelineMenu && (
+                    <div className="absolute left-0 top-full mt-1 z-50 bg-white border border-gray-200 rounded-xl shadow-lg py-1 min-w-[160px]">
+                      {PIPELINE_STATUTS.map(s => (
+                        <button
+                          key={s.value}
+                          onClick={() => s.value !== leadStatut && handleLeadStatutChange(s.value)}
+                          className={`w-full text-left px-3 py-2 text-xs font-medium hover:bg-gray-50 flex items-center gap-2 ${s.value === leadStatut ? "opacity-40 cursor-default" : ""}`}
+                        >
+                          <span className={`w-2 h-2 rounded-full border ${s.color}`} />
+                          {s.label}
+                          {s.value === leadStatut && <Check className="w-3 h-3 ml-auto" />}
+                        </button>
+                      ))}
+                      {leadId && (
+                        <div className="border-t border-gray-100 mt-1 pt-1">
+                          <Link
+                            href={`/leads/${leadId}`}
+                            className="w-full text-left px-3 py-2 text-xs text-blue-600 hover:bg-blue-50 flex items-center gap-2"
+                            onClick={() => setShowPipelineMenu(false)}
+                          >
+                            Voir fiche prospect →
+                          </Link>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
           </div>
           <p className="text-sm text-gray-500 mt-0.5">
             {client.statutJuridique}
@@ -1114,7 +1246,10 @@ export default function ClientDetail({ client, orgEmail }: { client: Client; org
       {tab === "notes" && <NotesTab clientId={client.id} />}
 
       {tab === "conversations" && (
-        <ConversationsTab clientId={client.id} clientEmail={client.email} orgEmail={orgEmail} clientPrenom={client.prenom} />
+        <ConversationsTab
+          clientId={client.id} clientEmail={client.email} orgEmail={orgEmail} clientPrenom={client.prenom}
+          formations={client.dossiers.filter(d => d.formation).map(d => ({ intitule: d.formation!.intitule, numero: d.numero }))}
+        />
       )}
     </div>
   );

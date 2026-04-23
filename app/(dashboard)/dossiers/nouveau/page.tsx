@@ -301,7 +301,7 @@ function NouveauDossierContent() {
           // Step 4
           dateDebut: admin.dateDebut,
           dateFin: admin.dateFin,
-          montantHT: montantHTNet,
+          montantHT: montantHT,
           tauxTVA: Number(admin.tauxTVA),
           modalite: admin.modalite,
           typeAction: admin.typeAction,

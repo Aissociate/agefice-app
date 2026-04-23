@@ -19,7 +19,7 @@ const ACTIONS: Record<string, string> = {
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const body = await req.json();
-  const { action, convId, instruction } = body;
+  const { action, convId, instruction, formationChoisie } = body;
 
   try {
     // Récupérer client + notes + dossiers actifs
@@ -79,7 +79,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     const actionLabel = ACTIONS[action] || action || "Autre";
 
-    const userPrompt = `
+    const userPrompt = `${formationChoisie ? `## Formation sélectionnée (priorité dans le message)\n${formationChoisie}\n\n` : ""}
 ## Contexte client
 - Nom : ${client.prenom} ${client.nom}
 - Entreprise : ${client.nomCommercial || client.statutJuridique}

@@ -14,6 +14,7 @@ export async function GET(
           include: { formation: true },
           orderBy: { dateCreation: "desc" },
         },
+        lead: { select: { id: true, statut: true } },
       },
     });
 
