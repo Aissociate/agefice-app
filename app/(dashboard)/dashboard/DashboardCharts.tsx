@@ -110,7 +110,7 @@ export default function DashboardCharts() {
                 data={leadsPieData} cx="50%" cy="50%"
                 innerRadius={60} outerRadius={95}
                 paddingAngle={2} dataKey="value"
-                label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                label={({ name, percent }) => `${name} ${((percent ?? 0) * 100).toFixed(0)}%`}
                 labelLine={false}
               >
                 {leadsPieData.map((_, i) => (
@@ -165,10 +165,11 @@ export default function DashboardCharts() {
                 <YAxis dataKey="etape" type="category" width={160} tick={{ fontSize: 11 }} />
                 <Tooltip
                   contentStyle={{ fontSize: 12, borderRadius: 8, border: "1px solid #E2E8F0" }}
-                  formatter={(v: number, _: string, p) => [
-                    `${v} jour${v > 1 ? "s" : ""} (n=${p.payload.n})`,
-                    "Durée moy.",
-                  ]}
+                  formatter={(v, _n, p) => {
+                    const num = Number(v ?? 0);
+                    const n = (p as { payload?: { n?: number } })?.payload?.n ?? 0;
+                    return [`${num} jour${num > 1 ? "s" : ""} (n=${n})`, "Durée moy."];
+                  }}
                 />
                 <Bar dataKey="jours" name="Durée moy." fill={PIPELINE_BAR_COLOR} radius={[0, 4, 4, 0]} />
               </BarChart>
