@@ -22,7 +22,7 @@ export default function ContenuPage() {
   useEffect(() => {
     fetch("/api/contenu")
       .then((r) => r.json())
-      .then((data) => { setPosts(data); setLoading(false); })
+      .then((data) => { setPosts(Array.isArray(data) ? data : []); setLoading(false); })
       .catch(() => setLoading(false));
   }, []);
 
