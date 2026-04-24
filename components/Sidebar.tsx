@@ -14,17 +14,19 @@ import {
   Mail,
   CalendarDays,
   PenSquare,
+  Globe,
 } from "lucide-react";
 
 const navItems = [
-  { href: "/dashboard",    label: "Tableau de bord",  icon: LayoutDashboard },
-  { href: "/dossiers",     label: "Dossiers AGEFICE", icon: FolderOpen      },
-  { href: "/clients",      label: "Clients",          icon: Users           },
-  { href: "/formations",   label: "Formations",       icon: BookOpen        },
-  { href: "/leads",        label: "Prospection",      icon: Target          },
-  { href: "/calendrier",   label: "Calendrier",       icon: CalendarDays    },
-  { href: "/contenu",      label: "Contenu",          icon: PenSquare       },
-  { href: "/parametres",   label: "Paramètres",       icon: Settings        },
+  { href: "/dashboard",      label: "Tableau de bord",  icon: LayoutDashboard },
+  { href: "/dossiers",       label: "Dossiers AGEFICE", icon: FolderOpen      },
+  { href: "/clients",        label: "Clients",          icon: Users           },
+  { href: "/formations",     label: "Formations",       icon: BookOpen        },
+  { href: "/leads",          label: "Prospection",      icon: Target          },
+  { href: "/calendrier",     label: "Calendrier",       icon: CalendarDays    },
+  { href: "/contenu",        label: "Contenu",          icon: PenSquare       },
+  { href: "/landing-pages",  label: "Landing Pages",    icon: Globe           },
+  { href: "/parametres",     label: "Paramètres",       icon: Settings        },
 ];
 
 type UnreadClient = { id: string; nom: string; prenom: string; count: number };

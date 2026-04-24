@@ -312,3 +312,34 @@ model PostBlog {
 
   @@map("posts_blog")
 }
+
+model LandingPage {
+  id           String          @id @default(cuid())
+  nom          String
+  sujet        String
+  publicCible  String?
+  offre        String?
+  template     String
+  statut       String          @default("brouillon")
+  dateCreation DateTime        @default(now())
+  dateMAJ      DateTime        @updatedAt
+  variants     LandingVariant[]
+
+  @@map("landing_pages")
+}
+
+model LandingVariant {
+  id           String      @id @default(cuid())
+  landingId    String
+  nom          String
+  angle        String?
+  palette      String      @default("bleu")
+  contenu      String
+  actif        Boolean     @default(false)
+  vues         Int         @default(0)
+  conversions  Int         @default(0)
+  dateCreation DateTime    @default(now())
+  landing      LandingPage @relation(fields: [landingId], references: [id], onDelete: Cascade)
+
+  @@map("landing_variants")
+}
