@@ -76,6 +76,7 @@ export function nombreEnLettres(n: number): string {
 }
 
 export const STATUTS_DOSSIER = {
+  brouillon: { label: "Brouillon", color: "bg-amber-100 text-amber-700", badge: "amber" },
   en_preparation: { label: "En préparation", color: "bg-gray-100 text-gray-700", badge: "gray" },
   depose: { label: "Déposé", color: "bg-blue-100 text-blue-700", badge: "blue" },
   accord: { label: "Accord de prise en charge", color: "bg-cyan-100 text-cyan-700", badge: "cyan" },
@@ -89,6 +90,7 @@ export const STATUTS_DOSSIER = {
 export type StatutDossier = keyof typeof STATUTS_DOSSIER;
 
 export const TRANSITIONS_STATUT: Record<StatutDossier, StatutDossier[]> = {
+  brouillon: ["en_preparation"],
   en_preparation: ["depose", "refuse"],
   depose: ["accord", "refuse"],
   accord: ["en_cours", "refuse"],

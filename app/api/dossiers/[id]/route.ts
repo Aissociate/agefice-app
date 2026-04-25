@@ -41,6 +41,7 @@ export async function PUT(
     const { id } = await params;
     const body = await request.json();
     const {
+      formationId,
       dateDebut, dateFin, montantHT, tauxTVA, modalite, statut, notes,
       nomFormateur, nombreParticipants,
       lieuFormationAdresse, lieuFormationCodePostal, lieuFormationVille,
@@ -65,6 +66,7 @@ export async function PUT(
 
     const updateData: any = {};
 
+    if (formationId !== undefined) updateData.formationId = formationId;
     if (dateDebut !== undefined) {
       const parsedDateDebut = new Date(dateDebut);
       updateData.dateDebut = parsedDateDebut;

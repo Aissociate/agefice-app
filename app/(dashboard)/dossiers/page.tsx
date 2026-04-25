@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Plus, FolderOpen } from "lucide-react";
+import { Plus, FolderOpen, Pencil } from "lucide-react";
 import { formatDate, formatMontant, joursRestants, getUrgenceColor, STATUTS_DOSSIER } from "@/lib/utils";
 
 interface Dossier {
@@ -42,9 +42,10 @@ export default function DossiersPage() {
       .catch(() => setLoading(false));
   }, []);
 
+  const brouillons = dossiers.filter(d => d.statut === "brouillon");
   const filtered =
     statutFilter === "tous"
-      ? dossiers
+      ? dossiers.filter(d => d.statut !== "brouillon")
       : dossiers.filter((d) => d.statut === statutFilter);
 
   return (
@@ -54,7 +55,7 @@ export default function DossiersPage() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Dossiers AGEFICE</h1>
           <p className="text-sm text-gray-500 mt-1">
-            {dossiers.length} dossier{dossiers.length !== 1 ? "s" : ""}
+            {dossiers.filter(d => d.statut !== "brouillon").length} dossier{dossiers.filter(d => d.statut !== "brouillon").length !== 1 ? "s" : ""}
           </p>
         </div>
         <Link
@@ -65,6 +66,30 @@ export default function DossiersPage() {
           Nouveau dossier
         </Link>
       </div>
+
+      {/* Brouillons */}
+      {brouillons.length > 0 && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-2">
+          <p className="text-sm font-semibold text-amber-800 flex items-center gap-2">
+            <Pencil className="w-4 h-4" />
+            {brouillons.length} dossier{brouillons.length > 1 ? "s" : ""} en cours de création
+          </p>
+          {brouillons.map(d => (
+            <div key={d.id} className="flex items-center justify-between bg-white rounded-lg border border-amber-100 px-4 py-2.5">
+              <div className="text-sm text-gray-700">
+                <span className="font-medium">{d.client ? `${d.client.prenom} ${d.client.nom}` : "—"}</span>
+                {d.formation && <span className="text-gray-400 ml-2">· {d.formation.intitule}</span>}
+              </div>
+              <Link
+                href={`/dossiers/nouveau?draft=${d.id}`}
+                className="inline-flex items-center gap-1.5 text-xs font-medium text-amber-700 hover:text-amber-900 bg-amber-100 hover:bg-amber-200 px-3 py-1.5 rounded-lg transition-colors"
+              >
+                <Pencil className="w-3 h-3" /> Reprendre
+              </Link>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Filter */}
       <div className="flex items-center gap-3">

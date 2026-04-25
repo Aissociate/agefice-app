@@ -1,11 +1,11 @@
 "use client";
 
-import { Suspense, useEffect, useState, useCallback } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
   ArrowLeft, ArrowRight, Check, AlertTriangle, Clock, BookOpen,
-  User, CreditCard, FileCheck, Calendar, Star, Plus, Trash2, SkipForward,
+  User, CreditCard, FileCheck, Calendar, Star, Plus, Trash2, SkipForward, Save,
 } from "lucide-react";
 import {
   formatDate, formatMontant, joursRestants,
@@ -130,7 +130,13 @@ function NouveauDossierContent() {
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [selectedFormation, setSelectedFormation] = useState<Formation | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [savingDraft, setSavingDraft] = useState(false);
   const [error, setError] = useState("");
+
+  /* Draft support */
+  const draftIdParam = searchParams.get("draft");
+  const [savedDraftId, setSavedDraftId] = useState<string | null>(draftIdParam);
+  const skipFormationPrefill = useRef(false);
 
   /* Inline client creation */
   const [showNewClient, setShowNewClient] = useState(false);
@@ -191,38 +197,104 @@ function NouveauDossierContent() {
     fetch("/api/formations?actif=true").then(r => r.json()).then(setFormations);
   }, [preselectedClientId]);
 
-  /* Pre-fill admin when formation selected */
+  /* Pre-fill admin when formation selected (skip when loading a draft) */
   useEffect(() => {
-    if (selectedFormation) {
-      setAdmin(p => ({
-        ...p,
-        montantHT: String(selectedFormation.tarifInterHT),
-        modalite: selectedFormation.modalite,
-        nomFormateur: selectedFormation.nomFormateur || "",
-        dureePresIndividuel: selectedFormation.dureePresIndividuel != null ? String(selectedFormation.dureePresIndividuel) : "",
-        dureePresCollectif:  selectedFormation.dureePresCollectif  != null ? String(selectedFormation.dureePresCollectif)  : "",
-        dureeDistSynchrone:  selectedFormation.dureeDistSynchrone  != null ? String(selectedFormation.dureeDistSynchrone)  : "",
-        dureeDistAsynchrone: selectedFormation.dureeDistAsynchrone != null ? String(selectedFormation.dureeDistAsynchrone) : "",
-        typeCertification: selectedFormation.certifiant ? "rncp" : "attestation",
-      }));
-      /* Pre-fill evaluation objectifs */
-      const objs = selectedFormation.objectifs
-        ? selectedFormation.objectifs.split(/\n|;/).map(l => l.replace(/^[-•*]\s*/, "").trim()).filter(l => l.length > 3)
-        : [];
-      setEvalState(p => ({
-        ...p,
-        objectifs: objs.map(texte => ({ texte, score: "", commentaire: "" })),
-        dureePresIndividuelRealisee: selectedFormation.dureePresIndividuel != null ? String(selectedFormation.dureePresIndividuel) : "",
-        dureePresCollectifRealisee:  selectedFormation.dureePresCollectif  != null ? String(selectedFormation.dureePresCollectif)  : "",
-        dureeDistSynchroneRealisee:  selectedFormation.dureeDistSynchrone  != null ? String(selectedFormation.dureeDistSynchrone)  : "",
-        dureeDistAsynchroneRealisee: selectedFormation.dureeDistAsynchrone != null ? String(selectedFormation.dureeDistAsynchrone) : "",
-      }));
-      /* Pre-fill financement */
-      if (selectedFormation.plafondAGEFICE) {
-        setFin(p => ({ ...p, montantPriseEnCharge: String(Math.min(selectedFormation.tarifInterHT, selectedFormation.plafondAGEFICE!)) }));
-      }
+    if (!selectedFormation) return;
+    if (skipFormationPrefill.current) { skipFormationPrefill.current = false; return; }
+    setAdmin(p => ({
+      ...p,
+      montantHT: String(selectedFormation.tarifInterHT),
+      modalite: selectedFormation.modalite,
+      nomFormateur: selectedFormation.nomFormateur || "",
+      dureePresIndividuel: selectedFormation.dureePresIndividuel != null ? String(selectedFormation.dureePresIndividuel) : "",
+      dureePresCollectif:  selectedFormation.dureePresCollectif  != null ? String(selectedFormation.dureePresCollectif)  : "",
+      dureeDistSynchrone:  selectedFormation.dureeDistSynchrone  != null ? String(selectedFormation.dureeDistSynchrone)  : "",
+      dureeDistAsynchrone: selectedFormation.dureeDistAsynchrone != null ? String(selectedFormation.dureeDistAsynchrone) : "",
+      typeCertification: selectedFormation.certifiant ? "rncp" : "attestation",
+    }));
+    const objs = selectedFormation.objectifs
+      ? selectedFormation.objectifs.split(/\n|;/).map(l => l.replace(/^[-•*]\s*/, "").trim()).filter(l => l.length > 3)
+      : [];
+    setEvalState(p => ({
+      ...p,
+      objectifs: objs.map(texte => ({ texte, score: "", commentaire: "" })),
+      dureePresIndividuelRealisee: selectedFormation.dureePresIndividuel != null ? String(selectedFormation.dureePresIndividuel) : "",
+      dureePresCollectifRealisee:  selectedFormation.dureePresCollectif  != null ? String(selectedFormation.dureePresCollectif)  : "",
+      dureeDistSynchroneRealisee:  selectedFormation.dureeDistSynchrone  != null ? String(selectedFormation.dureeDistSynchrone)  : "",
+      dureeDistAsynchroneRealisee: selectedFormation.dureeDistAsynchrone != null ? String(selectedFormation.dureeDistAsynchrone) : "",
+    }));
+    if (selectedFormation.plafondAGEFICE) {
+      setFin(p => ({ ...p, montantPriseEnCharge: String(Math.min(selectedFormation.tarifInterHT, selectedFormation.plafondAGEFICE!)) }));
     }
   }, [selectedFormation]);
+
+  /* Load draft from DB when ?draft=ID is in URL */
+  useEffect(() => {
+    if (!draftIdParam) return;
+    fetch(`/api/dossiers/${draftIdParam}`)
+      .then(r => r.json())
+      .then(d => {
+        if (!d.id) return;
+        if (d.client) setSelectedClient(d.client);
+        if (d.formation) {
+          skipFormationPrefill.current = true;
+          setSelectedFormation(d.formation);
+        }
+        setFin({
+          typeFinancement: d.typeFinancement ?? "agefice",
+          nomFinanceur: d.nomFinanceur ?? "",
+          montantPriseEnCharge: d.montantPriseEnCharge != null ? String(d.montantPriseEnCharge) : "",
+          remisePourcent: d.remisePourcent != null ? String(d.remisePourcent) : "",
+          remiseMontant: d.remiseMontant != null ? String(d.remiseMontant) : "",
+        });
+        const isFakeDate = (s: string) => {
+          if (!s) return true;
+          const diff = Math.abs(new Date(s).getTime() - Date.now());
+          return diff < 30 * 24 * 60 * 60 * 1000 && d.montantHT === 0;
+        };
+        if (!isFakeDate(d.dateDebut)) {
+          setAdmin(p => ({
+            ...p,
+            dateDebut: d.dateDebut ? d.dateDebut.substring(0, 10) : "",
+            dateFin: d.dateFin ? d.dateFin.substring(0, 10) : "",
+            montantHT: d.montantHT > 0 ? String(d.montantHT) : p.montantHT,
+            tauxTVA: String(d.tauxTVA ?? 0),
+            modalite: d.modalite || p.modalite,
+            typeAction: d.typeAction || p.typeAction,
+            formationObligatoire: d.formationObligatoire ?? false,
+            reconversion: d.reconversion ?? false,
+            formationEnEntreprise: d.formationEnEntreprise ?? false,
+            nomFormateur: d.nomFormateur ?? "",
+            nombreParticipants: String(d.nombreParticipants ?? 1),
+            lieuFormationAdresse: d.lieuFormationAdresse ?? "",
+            lieuFormationCodePostal: d.lieuFormationCodePostal ?? "",
+            lieuFormationVille: d.lieuFormationVille ?? "",
+            dureePresIndividuel: d.dureePresIndividuel != null ? String(d.dureePresIndividuel) : "",
+            dureePresCollectif: d.dureePresCollectif != null ? String(d.dureePresCollectif) : "",
+            dureeDistSynchrone: d.dureeDistSynchrone != null ? String(d.dureeDistSynchrone) : "",
+            dureeDistAsynchrone: d.dureeDistAsynchrone != null ? String(d.dureeDistAsynchrone) : "",
+            modalitesDeroulement: d.modalitesDeroulement ?? "",
+            modalitesEvaluation: d.modalitesEvaluation ? JSON.parse(d.modalitesEvaluation) : [],
+            typeCertification: d.typeCertification ?? "attestation",
+            notes: d.notes ?? "",
+          }));
+        }
+        if (d.joursSession) {
+          try { setSessions(JSON.parse(d.joursSession)); } catch { /* ignore */ }
+        }
+        const savedStep = Number(localStorage.getItem(`draftStep_${draftIdParam}`)) || 3;
+        setStep(savedStep);
+      })
+      .catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draftIdParam]);
+
+  /* Persist current step to localStorage for resume */
+  useEffect(() => {
+    if (savedDraftId && step >= 3) {
+      localStorage.setItem(`draftStep_${savedDraftId}`, String(step));
+    }
+  }, [step, savedDraftId]);
 
   /* Derived */
   const montantHT = Number(admin.montantHT) || 0;
@@ -268,6 +340,98 @@ function NouveauDossierContent() {
     finally { setCreatingClient(false); }
   }
 
+  /* Formation selection — creates brouillon on first pick */
+  async function handleSelectFormation(f: Formation) {
+    setSelectedFormation(f);
+    if (!savedDraftId) {
+      setSavingDraft(true);
+      try {
+        const res = await fetch("/api/dossiers", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ clientId: selectedClient!.id, formationId: f.id, brouillon: true }),
+        });
+        if (res.ok) {
+          const d = await res.json();
+          setSavedDraftId(d.id);
+          router.replace(`/dossiers/nouveau?draft=${d.id}`, { scroll: false });
+        }
+      } catch { /* non-blocking */ }
+      finally { setSavingDraft(false); }
+    } else {
+      /* Formation changed — update draft */
+      fetch(`/api/dossiers/${savedDraftId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ formationId: f.id }),
+      }).catch(() => {});
+    }
+    setStep(3);
+  }
+
+  /* Save data for a given step to the draft */
+  async function saveStepToDraft(stepData: Record<string, unknown>) {
+    if (!savedDraftId) return;
+    setSavingDraft(true);
+    try {
+      await fetch(`/api/dossiers/${savedDraftId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(stepData),
+      });
+    } catch { /* non-blocking */ }
+    finally { setSavingDraft(false); }
+  }
+
+  /* Step 3 → 4 */
+  async function advanceFromStep3() {
+    await saveStepToDraft({
+      typeFinancement: fin.typeFinancement || null,
+      nomFinanceur: fin.nomFinanceur || null,
+      montantPriseEnCharge: montantPC || null,
+      remisePourcent: fin.remisePourcent ? Number(fin.remisePourcent) : null,
+      remiseMontant: fin.remiseMontant && !fin.remisePourcent ? Number(fin.remiseMontant) : null,
+    });
+    setStep(4);
+  }
+
+  /* Step 4 → 5 */
+  async function advanceFromStep4() {
+    await saveStepToDraft({
+      dateDebut: admin.dateDebut,
+      dateFin: admin.dateFin,
+      montantHT,
+      tauxTVA: Number(admin.tauxTVA),
+      modalite: admin.modalite,
+      typeAction: admin.typeAction,
+      formationObligatoire: admin.formationObligatoire,
+      reconversion: admin.reconversion,
+      formationEnEntreprise: admin.formationEnEntreprise,
+      nomFormateur: admin.nomFormateur || null,
+      nombreParticipants: Number(admin.nombreParticipants) || 1,
+      lieuFormationAdresse: admin.lieuFormationAdresse || null,
+      lieuFormationCodePostal: admin.lieuFormationCodePostal || null,
+      lieuFormationVille: admin.lieuFormationVille || null,
+      dureePresIndividuel: admin.dureePresIndividuel ? Number(admin.dureePresIndividuel) : null,
+      dureePresCollectif: admin.dureePresCollectif ? Number(admin.dureePresCollectif) : null,
+      dureeDistSynchrone: admin.dureeDistSynchrone ? Number(admin.dureeDistSynchrone) : null,
+      dureeDistAsynchrone: admin.dureeDistAsynchrone ? Number(admin.dureeDistAsynchrone) : null,
+      modalitesDeroulement: admin.modalitesDeroulement || null,
+      modalitesEvaluation: admin.modalitesEvaluation.length > 0 ? JSON.stringify(admin.modalitesEvaluation) : null,
+      typeCertification: admin.typeCertification || null,
+      notes: admin.notes || null,
+    });
+    setStep(5);
+  }
+
+  /* Step 5 → 6 */
+  async function advanceFromStep5() {
+    await saveStepToDraft({
+      joursSession: sessions.filter(s => s.date).length > 0 ? sessions.filter(s => s.date) : null,
+    });
+    setStep(6);
+  }
+
   /* Add session */
   function addSession() {
     setSessions(p => [...p, { id: uid(), date: "", heureDebut: "09:00", heureFin: "12:00", lieu: "" }]);
@@ -291,63 +455,83 @@ function NouveauDossierContent() {
       ? evalState.objectifs.filter(o => o.score !== "")
       : null;
 
-    try {
-      const res = await fetch("/api/dossiers", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          clientId: selectedClient.id,
-          formationId: selectedFormation.id,
-          // Step 4
-          dateDebut: admin.dateDebut,
-          dateFin: admin.dateFin,
-          montantHT: montantHT,
-          tauxTVA: Number(admin.tauxTVA),
-          modalite: admin.modalite,
-          typeAction: admin.typeAction,
-          formationObligatoire: admin.formationObligatoire,
-          reconversion: admin.reconversion,
-          formationEnEntreprise: admin.formationEnEntreprise,
-          nomFormateur: admin.nomFormateur || undefined,
-          nombreParticipants: Number(admin.nombreParticipants) || 1,
-          lieuFormationAdresse: admin.lieuFormationAdresse || undefined,
-          lieuFormationCodePostal: admin.lieuFormationCodePostal || undefined,
-          lieuFormationVille: admin.lieuFormationVille || undefined,
-          dureePresIndividuel: admin.dureePresIndividuel ? Number(admin.dureePresIndividuel) : undefined,
-          dureePresCollectif:  admin.dureePresCollectif  ? Number(admin.dureePresCollectif)  : undefined,
-          dureeDistSynchrone:  admin.dureeDistSynchrone  ? Number(admin.dureeDistSynchrone)  : undefined,
-          dureeDistAsynchrone: admin.dureeDistAsynchrone ? Number(admin.dureeDistAsynchrone) : undefined,
-          modalitesDeroulement: admin.modalitesDeroulement || undefined,
-          modalitesEvaluation: admin.modalitesEvaluation.length > 0 ? JSON.stringify(admin.modalitesEvaluation) : undefined,
-          typeCertification: admin.typeCertification || undefined,
-          notes: admin.notes || undefined,
-          // Step 3 — Financement
-          typeFinancement: fin.typeFinancement || undefined,
-          nomFinanceur: fin.nomFinanceur || undefined,
-          montantPriseEnCharge: montantPC || undefined,
-          remisePourcent: fin.remisePourcent ? Number(fin.remisePourcent) : undefined,
-          remiseMontant: remiseMontantFinal || undefined,
-          // Step 5 — Sessions
-          joursSession: sessions.filter(s => s.date).length > 0 ? sessions.filter(s => s.date) : undefined,
-          // Step 6 — Evaluation
-          evaluationNotes: evalNotes || undefined,
-          notationGlobale: !skipEval ? (evalState.notationGlobale || undefined) : undefined,
-          dureePresIndividuelRealisee: !skipEval && evalState.dureePresIndividuelRealisee ? Number(evalState.dureePresIndividuelRealisee) : undefined,
-          dureePresCollectifRealisee:  !skipEval && evalState.dureePresCollectifRealisee  ? Number(evalState.dureePresCollectifRealisee)  : undefined,
-          dureeDistSynchroneRealisee:  !skipEval && evalState.dureeDistSynchroneRealisee  ? Number(evalState.dureeDistSynchroneRealisee)  : undefined,
-          dureeDistAsynchroneRealisee: !skipEval && evalState.dureeDistAsynchroneRealisee ? Number(evalState.dureeDistAsynchroneRealisee) : undefined,
-          modeReglement: !skipEval ? (evalState.modeReglement || undefined) : undefined,
-          dateReglement: !skipEval ? (evalState.dateReglement || undefined) : undefined,
-        }),
-      });
+    const evalPayload = skipEval ? {} : {
+      evaluationNotes: evalNotes || undefined,
+      notationGlobale: evalState.notationGlobale || undefined,
+      dureePresIndividuelRealisee: evalState.dureePresIndividuelRealisee ? Number(evalState.dureePresIndividuelRealisee) : undefined,
+      dureePresCollectifRealisee:  evalState.dureePresCollectifRealisee  ? Number(evalState.dureePresCollectifRealisee)  : undefined,
+      dureeDistSynchroneRealisee:  evalState.dureeDistSynchroneRealisee  ? Number(evalState.dureeDistSynchroneRealisee)  : undefined,
+      dureeDistAsynchroneRealisee: evalState.dureeDistAsynchroneRealisee ? Number(evalState.dureeDistAsynchroneRealisee) : undefined,
+      modeReglement: evalState.modeReglement || undefined,
+      dateReglement: evalState.dateReglement || undefined,
+    };
 
-      if (!res.ok) {
-        const data = await res.json();
-        setError(data.error ?? "Erreur lors de la création du dossier");
-        return;
+    try {
+      let dossierId: string;
+
+      if (savedDraftId) {
+        /* Finalise the existing brouillon */
+        const res = await fetch(`/api/dossiers/${savedDraftId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...evalPayload, statut: "en_preparation" }),
+        });
+        if (!res.ok) {
+          const data = await res.json();
+          setError(data.error ?? "Erreur lors de la finalisation du dossier");
+          return;
+        }
+        dossierId = savedDraftId;
+        localStorage.removeItem(`draftStep_${savedDraftId}`);
+      } else {
+        /* Legacy full POST (no draft created) */
+        const res = await fetch("/api/dossiers", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            clientId: selectedClient.id,
+            formationId: selectedFormation.id,
+            dateDebut: admin.dateDebut,
+            dateFin: admin.dateFin,
+            montantHT,
+            tauxTVA: Number(admin.tauxTVA),
+            modalite: admin.modalite,
+            typeAction: admin.typeAction,
+            formationObligatoire: admin.formationObligatoire,
+            reconversion: admin.reconversion,
+            formationEnEntreprise: admin.formationEnEntreprise,
+            nomFormateur: admin.nomFormateur || undefined,
+            nombreParticipants: Number(admin.nombreParticipants) || 1,
+            lieuFormationAdresse: admin.lieuFormationAdresse || undefined,
+            lieuFormationCodePostal: admin.lieuFormationCodePostal || undefined,
+            lieuFormationVille: admin.lieuFormationVille || undefined,
+            dureePresIndividuel: admin.dureePresIndividuel ? Number(admin.dureePresIndividuel) : undefined,
+            dureePresCollectif:  admin.dureePresCollectif  ? Number(admin.dureePresCollectif)  : undefined,
+            dureeDistSynchrone:  admin.dureeDistSynchrone  ? Number(admin.dureeDistSynchrone)  : undefined,
+            dureeDistAsynchrone: admin.dureeDistAsynchrone ? Number(admin.dureeDistAsynchrone) : undefined,
+            modalitesDeroulement: admin.modalitesDeroulement || undefined,
+            modalitesEvaluation: admin.modalitesEvaluation.length > 0 ? JSON.stringify(admin.modalitesEvaluation) : undefined,
+            typeCertification: admin.typeCertification || undefined,
+            notes: admin.notes || undefined,
+            typeFinancement: fin.typeFinancement || undefined,
+            nomFinanceur: fin.nomFinanceur || undefined,
+            montantPriseEnCharge: montantPC || undefined,
+            remisePourcent: fin.remisePourcent ? Number(fin.remisePourcent) : undefined,
+            remiseMontant: remiseMontantFinal || undefined,
+            joursSession: sessions.filter(s => s.date).length > 0 ? sessions.filter(s => s.date) : undefined,
+            ...evalPayload,
+          }),
+        });
+        if (!res.ok) {
+          const data = await res.json();
+          setError(data.error ?? "Erreur lors de la création du dossier");
+          return;
+        }
+        const dossier = await res.json();
+        dossierId = dossier.id;
       }
-      const dossier = await res.json();
-      router.push(`/dossiers/${dossier.id}`);
+
+      router.push(`/dossiers/${dossierId}`);
     } catch {
       setError("Erreur réseau, veuillez réessayer");
     } finally {
@@ -496,7 +680,7 @@ function NouveauDossierContent() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-96 overflow-y-auto pr-1">
               {formations.map(f => (
                 <button key={f.id} type="button"
-                  onClick={() => { setSelectedFormation(f); setStep(3); }}
+                  onClick={() => handleSelectFormation(f)}
                   className="text-left p-4 border-2 border-gray-200 hover:border-blue-400 hover:bg-blue-50 rounded-xl transition-all"
                 >
                   <div className="flex items-start justify-between gap-2 mb-2">
@@ -606,9 +790,16 @@ function NouveauDossierContent() {
 
           <div className="flex justify-between pt-2">
             <button onClick={() => setStep(2)} className="text-sm text-gray-500 hover:text-gray-700 flex items-center gap-1"><ArrowLeft className="w-4 h-4" /> Retour</button>
-            <button onClick={() => setStep(4)} className="inline-flex items-center gap-2 bg-[#1F4E79] hover:bg-[#163a5a] text-white text-sm font-medium px-5 py-2.5 rounded-lg">
-              Suivant <ArrowRight className="w-4 h-4" />
-            </button>
+            <div className="flex items-center gap-3">
+              {savedDraftId && (
+                <Link href="/dossiers" className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700">
+                  <Save className="w-3.5 h-3.5" /> Sauvegarder et quitter
+                </Link>
+              )}
+              <button onClick={advanceFromStep3} disabled={savingDraft} className="inline-flex items-center gap-2 bg-[#1F4E79] hover:bg-[#163a5a] disabled:opacity-50 text-white text-sm font-medium px-5 py-2.5 rounded-lg">
+                {savingDraft ? "Enregistrement…" : <><span>Suivant</span><ArrowRight className="w-4 h-4" /></>}
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -788,10 +979,17 @@ function NouveauDossierContent() {
 
           <div className="flex justify-between pt-2">
             <button onClick={() => setStep(3)} className="text-sm text-gray-500 hover:text-gray-700 flex items-center gap-1"><ArrowLeft className="w-4 h-4" /> Retour</button>
-            <button onClick={() => setStep(5)} disabled={!canAdvance4}
-              className="inline-flex items-center gap-2 bg-[#1F4E79] hover:bg-[#163a5a] disabled:opacity-50 text-white text-sm font-medium px-5 py-2.5 rounded-lg">
-              Suivant <ArrowRight className="w-4 h-4" />
-            </button>
+            <div className="flex items-center gap-3">
+              {savedDraftId && (
+                <Link href="/dossiers" className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700">
+                  <Save className="w-3.5 h-3.5" /> Sauvegarder et quitter
+                </Link>
+              )}
+              <button onClick={advanceFromStep4} disabled={!canAdvance4 || savingDraft}
+                className="inline-flex items-center gap-2 bg-[#1F4E79] hover:bg-[#163a5a] disabled:opacity-50 text-white text-sm font-medium px-5 py-2.5 rounded-lg">
+                {savingDraft ? "Enregistrement…" : <><span>Suivant</span><ArrowRight className="w-4 h-4" /></>}
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -863,9 +1061,16 @@ function NouveauDossierContent() {
 
           <div className="flex justify-between pt-2">
             <button onClick={() => setStep(4)} className="text-sm text-gray-500 hover:text-gray-700 flex items-center gap-1"><ArrowLeft className="w-4 h-4" /> Retour</button>
-            <button onClick={() => setStep(6)} className="inline-flex items-center gap-2 bg-[#1F4E79] hover:bg-[#163a5a] text-white text-sm font-medium px-5 py-2.5 rounded-lg">
-              Suivant <ArrowRight className="w-4 h-4" />
-            </button>
+            <div className="flex items-center gap-3">
+              {savedDraftId && (
+                <Link href="/dossiers" className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700">
+                  <Save className="w-3.5 h-3.5" /> Sauvegarder et quitter
+                </Link>
+              )}
+              <button onClick={advanceFromStep5} disabled={savingDraft} className="inline-flex items-center gap-2 bg-[#1F4E79] hover:bg-[#163a5a] disabled:opacity-50 text-white text-sm font-medium px-5 py-2.5 rounded-lg">
+                {savingDraft ? "Enregistrement…" : <><span>Suivant</span><ArrowRight className="w-4 h-4" /></>}
+              </button>
+            </div>
           </div>
         </div>
       )}

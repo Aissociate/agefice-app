@@ -41,6 +41,7 @@ export async function POST(request: NextRequest) {
     const {
       clientId,
       formationId,
+      brouillon,
       dateDebut,
       dateFin,
       montantHT,
@@ -67,9 +68,9 @@ export async function POST(request: NextRequest) {
       joursSession, evaluationNotes, notationGlobale,
     } = body;
 
-    if (!clientId || !formationId || !dateDebut || !dateFin || montantHT == null || !modalite) {
+    if (!clientId || !formationId) {
       return NextResponse.json(
-        { error: "Champs obligatoires manquants: clientId, formationId, dateDebut, dateFin, montantHT, modalite" },
+        { error: "Champs obligatoires manquants: clientId, formationId" },
         { status: 400 }
       );
     }
@@ -84,6 +85,45 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Formation non trouvée" }, { status: 404 });
     }
 
+    const numero = generateNumero();
+
+    /* ── Création brouillon (champs minimaux) ───────────────────────────── */
+    if (brouillon) {
+      const now = new Date();
+      const dossier = await prisma.dossier.create({
+        data: {
+          numero,
+          clientId,
+          formationId,
+          statut: "brouillon",
+          dateDebut: now,
+          dateFin: now,
+          dateLimiteDepot: now,
+          dateLimiteRemboursement: now,
+          montantHT: 0,
+          montantTTC: 0,
+          modalite: "presentiel",
+          pieces: {
+            create: [
+              { typePiece: "identite", statut: "manquante" },
+              { typePiece: "attestation_cfp", statut: "manquante" },
+              { typePiece: "kbis_sirene", statut: "manquante" },
+            ],
+          },
+        },
+        include: { client: true, formation: true, pieces: true, documents: true, alertes: true },
+      });
+      return NextResponse.json(dossier, { status: 201 });
+    }
+
+    /* ── Création complète ──────────────────────────────────────────────── */
+    if (!dateDebut || !dateFin || montantHT == null || !modalite) {
+      return NextResponse.json(
+        { error: "Champs obligatoires manquants: dateDebut, dateFin, montantHT, modalite" },
+        { status: 400 }
+      );
+    }
+
     const parsedDateDebut = new Date(dateDebut);
     const parsedDateFin = new Date(dateFin);
     const tva = tauxTVA ?? 0;
@@ -91,7 +131,6 @@ export async function POST(request: NextRequest) {
     const montantTTC = (montantHT - remiseMt) * (1 + tva / 100);
     const dateLimiteDepot = calculerDateLimiteDepot(parsedDateDebut);
     const dateLimiteRemboursement = calculerDateLimiteRemboursement(parsedDateFin);
-    const numero = generateNumero();
 
     const dossier = await prisma.dossier.create({
       data: {
