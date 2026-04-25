@@ -463,6 +463,61 @@ export async function GET() {
 
       // 1. Parser le header transposé pour les leads historiques
       const historicalLeads = parseMetaTransposedRow(row0);
+
+      // 2. Résoudre les notes (colonne W) pour les leads qui n'en ont pas encore.
+      //    Stratégie : trouver la fin de la dernière note connue dans la chaîne
+      //    brute, puis découper le reste pour les nouveaux leads.
+      const notesCell = row0[NOTES_COL] ?? "";
+      if (notesCell && historicalLeads.length > 0) {
+        const emailsInOrder = historicalLeads
+          .map((l) => l.email)
+          .filter((e): e is string => !!e);
+
+        // Chercher les notes existantes en DB pour établir l'ancre de fin
+        const existingInDB = await prisma.lead.findMany({
+          where: { email: { in: emailsInOrder } },
+          select: { email: true, feedbackHumain: true },
+        });
+        const existingNoteMap = new Map(
+          existingInDB
+            .filter((l) => l.email && l.feedbackHumain)
+            .map((l) => [l.email!.toLowerCase(), l.feedbackHumain!])
+        );
+
+        // Parcourir les emails dans l'ordre pour trouver où finit la dernière note connue
+        let endOfLastKnown = 0;
+        for (const email of emailsInOrder) {
+          const note = existingNoteMap.get(email.toLowerCase());
+          if (!note || note.length < 4) continue;
+          // Ancre = 30 premiers caractères de la note (suffisamment unique)
+          const anchor = note.trim().substring(0, 30);
+          const pos = notesCell.indexOf(anchor, endOfLastKnown);
+          if (pos >= 0) {
+            endOfLastKnown = pos + note.trim().length;
+          }
+        }
+
+        // Leads sans note en DB = les nouveaux à renseigner
+        const newLeads = historicalLeads.filter(
+          (l) => l.email && !existingNoteMap.has(l.email.toLowerCase())
+        );
+
+        if (endOfLastKnown > 0 && newLeads.length > 0) {
+          const remaining = notesCell.substring(endOfLastKnown).trim();
+          if (remaining) {
+            // Découper par double-espace (séparateur le plus fiable disponible)
+            const chunks = remaining
+              .split(/\s{2,}/)
+              .map((s) => s.trim())
+              .filter(Boolean);
+            newLeads.forEach((lead, i) => {
+              if (chunks[i]) lead.feedbackHumain = chunks[i];
+            });
+          }
+        }
+      }
+
+      // 3. Upsert tous les leads (notes incluses)
       for (const lead of historicalLeads) {
         const result = await upsertLead(lead as Record<string, unknown>);
         if (result === "created") created++;
