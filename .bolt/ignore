@@ -1,0 +1,13 @@
+.next/
+node_modules/
+.git/
+dist/
+build/
+out/
+coverage/
+*.tsbuildinfo
+dev.log
+public/uploads/
+prisma/dev.db
+prisma/dev.db-journal
+prisma/*.db-wal

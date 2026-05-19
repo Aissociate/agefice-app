@@ -7,7 +7,7 @@ const allowedDevOrigins = (process.env.ALLOWED_DEV_ORIGINS ?? "")
 
 const nextConfig: NextConfig = {
   output: process.env.BUILD_STANDALONE === "true" ? "standalone" : undefined,
-  serverExternalPackages: ["node-cron", "imapflow", "mailparser", "nodemailer", "puppeteer"],
+  serverExternalPackages: ["@anthropic-ai/sdk"],
   ...(allowedDevOrigins.length > 0 && { allowedDevOrigins }),
 };
 

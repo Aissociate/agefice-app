@@ -1,36 +1,61 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# AGEFICE App
 
-## Getting Started
+Application Next.js de gestion des dossiers de financement AGEFICE pour
+l'organisme de formation **AIssociate** (certifié Qualiopi n°814211-1).
 
-First, run the development server:
+## Stack
+
+- **Next.js 16** (App Router) + TypeScript + Tailwind CSS 4
+- **Prisma 7** avec `@prisma/adapter-libsql` + `@libsql/client` (SQLite via libSQL)
+- React Hook Form + Zod, date-fns, lucide-react, recharts
+- Anthropic SDK pour la prospection IA
+
+## Lancer le projet
+
+### En local (Node ≥ 20)
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install        # déclenche prisma generate + prisma db push
+npm run seed       # optionnel : données de démo
+npm run dev        # http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### Sur [Bolt.new](https://bolt.new)
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+1. Pousse ce repo sur GitHub.
+2. Ouvre `https://bolt.new/github.com/<ton-user>/<ton-repo>`.
+3. Bolt installe les deps automatiquement (le `postinstall` initialise la base).
+4. Configure les variables d'env dans l'UI Bolt (voir `.env.example`).
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Limites Bolt.new / WebContainer
 
-## Learn More
+WebContainer n'exécute pas de binaires natifs ni de sockets TCP bruts.
+Les modules suivants sont **stubbés** pour rester compatibles :
 
-To learn more about Next.js, take a look at the following resources:
+| Module | Remplacement |
+|---|---|
+| `lib/htmlToPdf.ts` (Puppeteer) | `throw` — désactivé |
+| `lib/imap.ts` (ImapFlow) | retourne `[]` — désactivé |
+| `lib/mailer.ts` (Nodemailer SMTP) | `throw` — désactivé |
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Pour réactiver email/PDF en production, déployer sur Vercel/VPS et brancher un
+service HTTP (Resend, Postmark, `@sparticuz/chromium`…).
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Scripts
 
-## Deploy on Vercel
+| Script | Description |
+|---|---|
+| `npm run dev` | Serveur de dev Next.js |
+| `npm run build` | Build de production |
+| `npm run start` | Serveur de production |
+| `npm run lint` | ESLint |
+| `npm run seed` | Insère les données de démo |
+| `npm run db:setup` | Push schéma + seed |
+| `npm run db:studio` | Ouvre Prisma Studio |
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Structure
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- `app/(dashboard)/` — pages authentifiées (clients, dossiers, formations…)
+- `app/api/` — routes API (App Router)
+- `lib/db.ts` — client Prisma (`prisma`, pas `db`)
+- `prisma/schema.prisma` — modèles SQLite

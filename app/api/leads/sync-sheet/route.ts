@@ -519,7 +519,7 @@ export async function GET() {
 
       // 3. Upsert tous les leads (notes incluses)
       for (const lead of historicalLeads) {
-        const result = await upsertLead(lead as Record<string, unknown>);
+        const result = await upsertLead(lead as unknown as Record<string, unknown>);
         if (result === "created") created++;
         else if (result === "updated") updated++;
         else skipped++;

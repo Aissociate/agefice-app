@@ -1,0 +1,37 @@
+Tu travailles sur **AGEFICE App** — gestion des dossiers de financement AGEFICE
+pour l'organisme de formation AIssociate (certifié Qualiopi).
+
+## Stack
+- Next.js 16 (App Router) + TypeScript + Tailwind CSS 4
+- Prisma 7 avec **@prisma/adapter-libsql** + **@libsql/client** (SQLite via libSQL,
+  compatible WebContainer)
+- React Hook Form + Zod, date-fns, lucide-react, recharts
+- Anthropic SDK pour la prospection IA
+
+## Conventions
+- Client Prisma exporté depuis `@/lib/db` sous le nom **`prisma`** (jamais `db`).
+- Routes API dans `app/api/.../route.ts` (App Router).
+- Pages dans `app/(dashboard)/...` pour l'espace authentifié.
+- Schéma Prisma dans `prisma/schema.prisma`, modèles SQLite.
+- Fichiers d'env : `.env` (DATABASE_URL `file:./prisma/dev.db`).
+
+## Limites WebContainer (Bolt.new)
+Les modules suivants ont été **stubbés** car incompatibles avec WebContainer :
+- `lib/htmlToPdf.ts` — Puppeteer (binaire Chromium natif) → throw
+- `lib/imap.ts` — ImapFlow (TCP brut) → no-op (renvoie tableau vide)
+- `lib/mailer.ts` — Nodemailer (SMTP/TCP brut) → throw
+
+Ne pas réintroduire ces dépendances. Pour réactiver l'email/PDF, utiliser un
+service HTTP (Resend, Postmark, @sparticuz/chromium sur Vercel, etc.).
+
+## Setup base de données
+À la première installation :
+```bash
+npm install            # déclenche prisma generate + prisma db push (postinstall)
+npm run seed           # optionnel : données de démo
+npm run dev
+```
+
+## Modèles principaux
+Client, Formation, Dossier, Document, PieceClient, Alerte, Parametre, Lead,
+ConversationEmail, MessageEmail, Mission, NoteClient.
